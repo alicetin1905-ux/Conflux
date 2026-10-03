@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CONFLUX v2 · BTCUSDT.P Entry Confluence</title>
+<title>CONFLUX v3 · Multi-Coin Confluence</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
@@ -177,6 +177,45 @@ header {
   font-size: 10px; font-weight: 700; color: #33070c; transition: width 0.5s; white-space: nowrap; overflow: hidden; flex: 1; }
 
 footer { max-width: 1240px; margin: 6px auto 0; padding: 0 14px; color: var(--muted); font-size: 10px; line-height: 1.6; }
+
+/* ---------- multi-coin ---------- */
+.hdr-sym { color: var(--muted); font-size: 12px; letter-spacing: 1px; margin-right: 6px; }
+.hrow { grid-template-columns: 64px 1fr auto; }
+.coin-row {
+  display: grid; grid-template-columns: 18px 48px 1fr 62px 84px 60px; gap: 8px; align-items: center;
+  padding: 8px 14px; border-bottom: 1px solid var(--border); font-size: 11px; cursor: pointer;
+}
+.coin-row:last-child { border-bottom: none; }
+.coin-row:hover { background: var(--panel2); }
+.coin-row.viewing { background: rgba(77,166,255,0.07); box-shadow: inset 2px 0 0 var(--accent); }
+.coin-row.off .nm, .coin-row.off .px { color: var(--muted); }
+.coin-row .nm { font-weight: 700; }
+.coin-row .px { text-align: right; }
+.coin-row .c24 { text-align: right; font-size: 10px; color: var(--muted); }
+.coin-row .c24.pos { color: var(--long); } .coin-row .c24.neg { color: var(--short); }
+.coin-head { cursor: default; color: var(--muted); font-size: 9px; letter-spacing: 1px; }
+.coin-head:hover { background: none; }
+.coin-on { accent-color: var(--long); width: 13px; height: 13px; cursor: pointer; }
+.tag {
+  font-size: 9px; letter-spacing: 1px; padding: 2px 6px; border-radius: 10px; border: 1px solid var(--border);
+  color: var(--muted); text-align: center; white-space: nowrap;
+}
+.tag.long { color: var(--long); border-color: rgba(34,212,126,0.4); }
+.tag.short { color: var(--short); border-color: rgba(255,77,94,0.4); }
+.tag.long.live { background: rgba(34,212,126,0.14); }
+.tag.short.live { background: rgba(255,77,94,0.14); }
+@media (max-width: 600px) {
+  .coin-row { grid-template-columns: 18px 44px 1fr 78px 52px; }
+  .coin-row .c24 { display: none; }
+}
+.settings { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); }
+.set { background: var(--panel); padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.set .k { color: var(--muted); font-size: 9px; letter-spacing: 1px; }
+.set select {
+  background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: 6px;
+  font-family: inherit; font-size: 11px; padding: 3px 6px;
+}
+.set-note { padding: 10px 14px; color: var(--muted); font-size: 10px; line-height: 1.5; border-top: 1px solid var(--border); }
 </style>
 </head>
 <body>
@@ -184,10 +223,10 @@ footer { max-width: 1240px; margin: 6px auto 0; padding: 0 14px; color: var(--mu
 <header>
   <div class="brand">
     <h1>CONFLUX</h1>
-    <span class="sub">v2 · BTCUSDT.P · BYBIT LINEAR</span>
+    <span class="sub">v3 · MULTI-COIN · BYBIT LINEAR</span>
   </div>
   <div class="price-block">
-    <div><span class="conn" id="conn"></span><span class="live-price" id="price">—</span></div>
+    <div><span class="conn" id="conn"></span><span class="hdr-sym" id="hdrSym">BTC</span><span class="live-price" id="price">—</span></div>
     <div class="chg" id="chg">24h —</div>
   </div>
 </header>
@@ -210,7 +249,7 @@ footer { max-width: 1240px; margin: 6px auto 0; padding: 0 14px; color: var(--mu
           <div class="s" id="mcapChg">24h —</div>
         </div>
         <div class="pulse-cell wide">
-          <div class="k">TAKER BUY / SELL PRESSURE · <span id="pressWin">5m</span> ROLLING · <span id="pressVol">—</span></div>
+          <div class="k"><span id="pressCoin">BTC</span> TAKER BUY / SELL PRESSURE · 5m ROLLING · <span id="pressVol">—</span></div>
           <div class="press-bar">
             <div class="press-buy" id="pressBuy" style="width:50%">BUY —</div>
             <div class="press-sell" id="pressSell">— SELL</div>
@@ -221,7 +260,19 @@ footer { max-width: 1240px; margin: 6px auto 0; padding: 0 14px; color: var(--mu
 
     <div class="panel">
       <div class="panel-head">
-        <span>Price · EMA50 · EMA200 · Supertrend</span>
+        <span>Coins · <span id="coinInfo">—</span></span>
+        <div style="display:flex;gap:6px;">
+          <button class="btn" id="coinAll">TRADE ALL</button>
+          <button class="btn" id="coinNone">NONE</button>
+        </div>
+      </div>
+      <div class="coin-row coin-head"><span></span><span>COIN</span><span style="text-align:right">PRICE</span><span class="c24" style="color:var(--muted)">24H</span><span style="text-align:center">SETUP</span><span style="text-align:center">POSITION</span></div>
+      <div id="coinRows"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <span><span id="chartSym">BTC</span> · EMA50 · EMA200 · Supertrend</span>
         <div class="tfs" id="tfs">
           <button class="tf" data-tf="60">1h</button>
           <button class="tf active" data-tf="240">4h</button>
@@ -263,6 +314,7 @@ footer { max-width: 1240px; margin: 6px auto 0; padding: 0 14px; color: var(--mu
           <div class="stat"><div class="k">BEST</div><div class="v" id="b-best">—</div></div>
           <div class="stat"><div class="k">WORST</div><div class="v" id="b-worst">—</div></div>
         </div>
+        <div id="btCoins"></div>
         <div id="btSweep"></div>
         <div id="btGrid"></div>
         <div class="empty" id="btNote" style="text-align:left;">—</div>
@@ -285,7 +337,7 @@ footer { max-width: 1240px; margin: 6px auto 0; padding: 0 14px; color: var(--mu
     </div>
 
     <div class="panel">
-      <div class="panel-head"><span>Confluence Stack</span><span id="closedTime">—</span></div>
+      <div class="panel-head"><span>Confluence Stack · <span id="viewSym">BTC</span></span><span id="closedTime">—</span></div>
       <div>
         <div class="cond" id="c-regime"><div class="dot"></div><div class="name">Regime · EMA50 vs EMA200</div><div class="val" id="v-regime">—</div></div>
         <div class="cond" id="c-struct"><div class="dot"></div><div class="name">Structure · Close vs EMA50</div><div class="val" id="v-struct">—</div></div>
@@ -299,15 +351,23 @@ footer { max-width: 1240px; margin: 6px auto 0; padding: 0 14px; color: var(--mu
     </div>
 
     <div class="panel">
-      <div class="panel-head">
-        <span>Paper Position · <span id="riskLabel">—</span> · 10x cap</span>
-        <span class="switch" id="sessSwitch"><span style="font-size:9px;letter-spacing:1px;">SESSION FILTER</span><span class="sw"></span></span>
+      <div class="panel-head"><span>Bot Settings · <span id="setTf">4h</span></span></div>
+      <div class="settings">
+        <label class="set"><span class="k">RISK PER COIN</span><select id="riskSel"></select></label>
+        <label class="set"><span class="k">MAX OPEN</span><select id="maxSel"></select></label>
+        <div class="set"><span class="k">HTF GATE</span><span class="switch" id="htfSwitch" role="switch" tabindex="0"><span class="sw"></span></span></div>
+        <div class="set"><span class="k">SESSION FILTER</span><span class="switch" id="sessSwitch" role="switch" tabindex="0"><span class="sw"></span></span></div>
       </div>
+      <div class="set-note" id="setNote">—</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><span>Paper Account · 10x cap</span><span id="openInfo">—</span></div>
       <div class="eq-row">
         <div><div style="font-size:9px;color:var(--muted);letter-spacing:1px;">EQUITY</div><div class="eq-val" id="eq">1000.00</div></div>
         <div class="eq-pnl" id="eqPnl">+0.00 USDT</div>
       </div>
-      <div id="posArea"><div class="flat">Flat — waiting for a gated entry trigger.</div></div>
+      <div id="posArea"><div class="flat">Flat — waiting for a gated entry trigger on a traded coin.</div></div>
     </div>
 
     <div class="panel">
@@ -318,37 +378,49 @@ footer { max-width: 1240px; margin: 6px auto 0; padding: 0 14px; color: var(--mu
 </div>
 
 <footer>
-  Signals on <b>closed candles only</b> (no repaint). Entry requires full 5/5 confluence, a fresh trigger (Supertrend flip or MACD zero-cross ≤ 2 bars), HTF bias agreement, and session OK (skips 02:00–06:00 UTC when filter is on). Management: 4h stops at 1.5×ATR with TP1 at 1R; 1h stops at the Supertrend line with TP1 at 2R (entry skipped if the stop is on the wrong side of price) → 50% off at TP1 → SL to fee-adjusted breakeven → trail on Supertrend; no flip exit. 2% target risk per trade. Fees 0.055%/side, booked in each trade's PnL. SL assumed to fill first on ambiguous bars; a bar that gaps through the stop fills at its open; cross-margin liquidation is modeled and a blown account stops trading. "Target risk" is capped by 10x leverage — the actual risk per trade is shown on the position and in the backtest. Educational paper tool — nothing here predicts the market.
+  One shared paper account trades every ticked coin. Signals on <b>closed candles only</b> (no repaint). Entry requires 5/5 confluence, a fresh trigger (Supertrend flip or MACD zero-cross ≤ 2 bars), session OK (skips 02:00–06:00 UTC when the filter is on) and, if the HTF gate is on, higher-timeframe agreement. 4h: stop 1.5×ATR, TP1 at 1R, HTF gate off by default. 1h: stop at the Supertrend line, TP1 at 2R, HTF gate on (validated on BTC only, roughly break-even out-of-sample). Management: 50% off at TP1 → SL to fee-adjusted breakeven → trail on Supertrend; no flip exit. Sizing: risk per coin of current equity, at most N positions open, total notional capped at 10× equity; simultaneous signals fill in coin-list order. Fees 0.055%/side, booked in each trade's PnL. SL-first on ambiguous bars; a bar that gaps through the stop fills at its open; cross-margin liquidation is modeled per position. No slippage modeled. Educational paper tool — nothing here predicts the market.
 </footer>
 
 <script>
 /* ================= CONFIG ================= */
-const SYMBOL = 'BTCUSDT';
+const COINS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'LINKUSDT', 'AVAXUSDT'];
 const REST_HOSTS = ['https://api.bybit.com', 'https://api.bytick.com'];
 const WS_URL = 'wss://stream.bybit.com/v5/public/linear';
 const LIMIT = 500;
 const FEE = 0.00055;
-const RISK_PCT = 2.0; // % of equity risked per trade when a profile doesn't set its own
-const LEV = 10;
+const LEV = 10; // shared cap: total notional of all open positions ≤ LEV × equity
 const START_EQUITY = 1000;
-const HTF_MAP = { '5': '30', '15': '60', '30': '240', '60': '240', '240': 'D' };
-/* per-TF strategy profile, from a full settings sweep on BTCUSDT (5m/15m/30m had no edge after fees and were removed).
-   slAtr: stop at N×ATR14 from entry (null = Supertrend line); tpR: TP1 multiple of the initial risk.
-   4h: profitable in-sample (2020-24) and out-of-sample (2025-26). 1h: roughly break-even out-of-sample. */
+const HTF_MAP = { '60': '240', '240': 'D' };
+const TF_SEC = { '60': 3600, '240': 14400, 'D': 86400 };
+const TF_LABEL = { '60': '1h', '240': '4h', 'D': '1D' };
+const BT_BARS_MAP = { '60': 5000, '240': 8000 };
+/* per-TF strategy profile, from a full settings sweep (5m/15m/30m had no edge after fees and were removed).
+   slAtr: stop at N×ATR14 from entry (null = Supertrend line); tpR: TP1 multiple of the initial risk;
+   htfGate: require the higher timeframe to agree (user can toggle it per TF).
+   4h without the HTF gate was profitable on all 9 coins over 2020-26 and on 8 of 9 out-of-sample.
+   1h was only validated on BTC (with the gate on) and was roughly break-even out-of-sample. */
 const TF_PROFILE = {
-  '60': { minScore: 5, flipExit: false, riskPct: 2, slAtr: null, tpR: 2 },
-  '240': { minScore: 5, flipExit: false, riskPct: 2, slAtr: 1.5, tpR: 1 }
+  '60': { minScore: 5, flipExit: false, slAtr: null, tpR: 2, htfGate: true },
+  '240': { minScore: 5, flipExit: false, slAtr: 1.5, tpR: 1, htfGate: false }
 };
-const TF_LABEL = { '5': '5m', '15': '15m', '30': '30m', '60': '1h', '240': '4h', 'D': '1D' };
+const RISK_CHOICES = [0.25, 0.5, 1, 2, 3, 5];
+const MAX_OPEN_CHOICES = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 let tf = '240';
-let candles = [], liveBar = null;
-let htfCandles = [];
-let ws = null, wsAlive = false, wsResync = false;
+let viewSym = 'BTCUSDT';
+const mkt = {}; // sym -> { candles, htfCandles, liveBar, last, pct, ev, hb }
+let ws = null, wsAlive = false, wsResync = false, wsTopics = new Set();
 let chart, candleSeries, ema50Series, ema200Series, stSeries, volSeries;
 let eqChart, eqSeries;
-let paper = null;
-let settings = { sessionFilter: true };
+let acct = null;
+let settings = { sessionFilter: true, coins: [...COINS], riskPct: 1, maxOpen: 4, htfGate: { '60': true, '240': false } };
+
+const coinName = s => s.replace('USDT', '');
+function profFor(t) { return { ...TF_PROFILE[t], htfGate: settings.htfGate[t] ?? TF_PROFILE[t].htfGate }; }
+/* coins the account trades or still has to manage */
+function tradeSyms() { return COINS.filter(s => settings.coins.includes(s) || (acct && acct.positions[s])); }
+/* coins we need candles for: the traded ones plus whatever is on the chart */
+function dataSyms() { return COINS.filter(s => s === viewSym || tradeSyms().includes(s)); }
 
 /* ================= INDICATORS (verified in Node) ================= */
 function ema(values, period) {
@@ -497,136 +569,262 @@ function sigAt(per, bars, i, bias, prof, useSessionFilter) {
     side: v.side, score: v.score,
     trigger: p.trigger || !!(per[i - 1] && per[i - 1].trigger), // fresh trigger on this bar or the one before (≤ 2 bars)
     stLine: p.stLine, stDir: p.stDir, slPrice,
-    htfOk: v.side === 'long' ? bias === 1 : v.side === 'short' ? bias === -1 : false,
+    // with the HTF gate off any setup passes; with it on the higher timeframe must agree
+    htfOk: v.side === 'wait' ? false : prof.htfGate === false ? true : (v.side === 'long' ? bias === 1 : bias === -1),
     sessionOk: !useSessionFilter || !inDeadZone(bar.time),
     flipExit: prof.flipExit
   };
 }
 
-/* ================= PAPER ENGINE (verified in Node) ================= */
-const MMR = 0.005; // maintenance margin rate (Bybit BTCUSDT tier 1), cross margin on the whole wallet
+/* bias per HTF bar: 1 bull, -1 bear, 0 mixed/warmup */
+function htfBiasSeries(cs) {
+  const closes = cs.map(c => c.close);
+  const e50 = ema(closes, 50), e200 = ema(closes, 200);
+  const st = supertrend(cs, 10, 3);
+  return cs.map((_, i) => {
+    if (e200[i] == null || st.dir[i] == null) return 0;
+    if (e50[i] > e200[i] && st.dir[i] === 1) return 1;
+    if (e50[i] < e200[i] && st.dir[i] === -1) return -1;
+    return 0;
+  });
+}
+
+/* ================= PAPER ENGINE: one shared account, many coins (verified in Node) ================= */
+const MMR = 0.005; // maintenance margin rate (Bybit tier 1)
 const MIN_EQUITY = 0.01; // below this the account is blown and stops trading
 
-function newState(equity = START_EQUITY) {
-  return { equity, pos: null, trades: [], curve: [], lastBarTime: 0, startedAt: Date.now(), peak: equity, maxDD: 0 };
+function newAcct(equity = START_EQUITY) {
+  return { equity, positions: {}, trades: [], curve: [], lastBarTime: 0, startedAt: Date.now(), peak: equity, maxDD: 0 };
 }
 /* track peak equity and max drawdown from mark-to-market values (incl. intrabar worst case) */
-function markDD(state, value) {
-  if (state.peak == null) state.peak = START_EQUITY;
-  if (state.maxDD == null) state.maxDD = 0;
-  if (value > state.peak) state.peak = value;
-  else if (state.peak > 0) state.maxDD = Math.max(state.maxDD, Math.min(1, (state.peak - value) / state.peak));
+function markDD(acct, value) {
+  if (value > acct.peak) acct.peak = value;
+  else if (acct.peak > 0) acct.maxDD = Math.max(acct.maxDD, Math.min(1, (acct.peak - value) / acct.peak));
 }
-/* price where wallet equity hits maintenance margin, and where it hits zero (bankruptcy, the liquidation fill) */
-function liqPrices(state) {
-  const p = state.pos, q = p.qty, E = state.equity;
+function openCount(acct) { return Object.keys(acct.positions).length; }
+function usedNotional(acct) { let n = 0; for (const p of Object.values(acct.positions)) n += p.qty * p.entry; return n; }
+/* cross margin: each position is backed by a share of the wallet proportional to its notional.
+   Returns the maintenance-margin price (liq) and the price where that share hits zero (bankrupt, the fill). */
+function liqPrices(acct, p) {
+  const total = usedNotional(acct), q = p.qty;
+  const E = total > 0 ? acct.equity * (q * p.entry) / total : acct.equity;
   if (p.dir === 1) return { liq: (q * p.entry - E) / (q * (1 - MMR)), bankrupt: (q * p.entry - E) / (q * (1 - FEE)) };
   return { liq: (E + q * p.entry) / (q * (1 + MMR)), bankrupt: (E + q * p.entry) / (q * (1 + FEE)) };
 }
-function openPos(state, side, bar, slPrice) {
-  if (!(state.equity > MIN_EQUITY)) return false;
+function openPos(acct, sym, side, bar, slPrice, riskPct, tpR) {
+  if (!(acct.equity > MIN_EQUITY) || acct.positions[sym]) return false;
   const entry = bar.close, sl = slPrice;
   const dir = side === 'long' ? 1 : -1;
-  // the stop must sit on the losing side of entry: a 4/5 setup can fire while Supertrend still points the other way
+  // the stop must sit on the losing side of entry
   if (sl == null || !((entry - sl) * dir > 0)) return false;
   const dist = (entry - sl) * dir;
-  const riskUsd = state.equity * (state.riskPct ?? RISK_PCT) / 100;
-  let qty = riskUsd / dist;
-  const cap = state.equity * LEV / entry;
-  if (qty > cap) qty = cap;
-  const tpR = state.tpR ?? 1.5;
+  let qty = acct.equity * riskPct / 100 / dist;
+  // leverage cap is shared: total notional across all open positions stays within LEV × equity
+  const room = acct.equity * LEV - usedNotional(acct);
+  if (!(room > 0)) return false;
+  qty = Math.min(qty, room / entry);
   const entryFee = qty * entry * FEE;
   const actualRisk = dist * qty;
-  const riskPct = actualRisk / state.equity * 100;
-  state.equity -= entryFee;
+  const riskShare = actualRisk / acct.equity * 100;
+  acct.equity -= entryFee;
   // breakeven that also covers both fees on the remaining size
   const be = dir === 1 ? entry * (1 + FEE) / (1 - FEE) : entry * (1 - FEE) / (1 + FEE);
-  state.pos = { side, dir, entry, qty, initQty: qty, sl, tp1: entry + dir * tpR * dist, tpR, tp1Hit: false, riskUsd, actualRisk, riskPct, entryFee, be, openTime: bar.time };
+  acct.positions[sym] = { sym, side, dir, entry, qty, initQty: qty, sl, tp1: entry + dir * tpR * dist, tpR, tp1Hit: false, actualRisk, riskPct: riskShare, entryFee, be, openTime: bar.time };
   return true;
 }
-function closePart(state, exitPrice, qty, time, reason) {
-  const p = state.pos;
+function closePart(acct, sym, exitPrice, qty, time, reason) {
+  const p = acct.positions[sym];
   const pnl = (exitPrice - p.entry) * qty * p.dir;
   const feeOut = qty * exitPrice * FEE;
-  const feeIn = (p.entryFee ?? 0) * qty / p.initQty; // entry fee already left equity at open; book its share on this fill
-  state.equity += pnl - feeOut;
-  state.trades.push({ side: p.side, entry: p.entry, exit: exitPrice, qty, pnl: pnl - feeOut - feeIn, reason, risk: p.actualRisk, riskPct: p.riskPct, openTime: p.openTime, closeTime: time });
+  const feeIn = p.entryFee * qty / p.initQty; // entry fee already left equity at open; book its share on this fill
+  acct.equity += pnl - feeOut;
+  acct.trades.push({ sym, side: p.side, entry: p.entry, exit: exitPrice, qty, pnl: pnl - feeOut - feeIn, reason, risk: p.actualRisk, riskPct: p.riskPct, openTime: p.openTime, closeTime: time });
   p.qty -= qty;
-  state.curve.push({ time, value: state.equity });
-  if (p.qty <= p.initQty * 1e-9) state.pos = null;
+  acct.curve.push({ time, value: acct.equity });
+  if (p.qty <= p.initQty * 1e-9) delete acct.positions[sym];
 }
-function paperStep(state, bar, sig) {
-  if (bar.time <= state.lastBarTime) return false;
-  state.lastBarTime = bar.time;
-  let changed = false, justExited = false;
-  const p = state.pos;
-  if (p) {
-    const d = p.dir;
-    const { liq, bankrupt } = liqPrices(state);
-    const hitLiq = d === 1 ? bar.low <= liq : bar.high >= liq;
-    const hitSL = d === 1 ? bar.low <= p.sl : bar.high >= p.sl;
-    // a bar that opens through the stop fills at the open, not at the stop price
-    const slFill = d === 1 ? Math.min(p.sl, bar.open) : Math.max(p.sl, bar.open);
-    const liqFirst = hitLiq && (!hitSL || (d === 1 ? liq >= slFill : liq <= slFill));
-    // intrabar worst case for drawdown (SL-first convention, same as the exits below)
-    const worstPx = liqFirst ? bankrupt : hitSL ? slFill : (d === 1 ? bar.low : bar.high);
-    markDD(state, state.equity + (worstPx - p.entry) * p.qty * d);
-    if (liqFirst) {
-      closePart(state, bankrupt, p.qty, bar.time, 'LIQ');
-      state.equity = Math.max(0, state.equity);
-      justExited = true; changed = true;
-    } else if (hitSL) {
-      closePart(state, slFill, p.qty, bar.time, p.tp1Hit ? 'TRAIL' : 'SL');
-      justExited = true; changed = true;
-    } else {
-      if (!p.tp1Hit && (d === 1 ? bar.high >= p.tp1 : bar.low <= p.tp1)) {
-        closePart(state, p.tp1, p.qty * 0.5, bar.time, 'TP1');
-        if (state.pos) { p.tp1Hit = true; p.sl = p.be ?? p.entry; }
-        changed = true;
-      }
-      if (state.pos && sig.stDir != null && sig.stDir !== d && sig.flipExit !== false) {
-        closePart(state, bar.close, state.pos.qty, bar.time, 'FLIP');
-        justExited = true; changed = true;
-      } else if (state.pos && p.tp1Hit && sig.stDir === d && sig.stLine != null) {
-        const ns = d === 1 ? Math.max(p.sl, sig.stLine) : Math.min(p.sl, sig.stLine);
-        if (ns !== p.sl) { p.sl = ns; changed = true; }
-      }
-    }
+/* exit side of one bar for one position; returns { changed, exited } */
+function managePos(acct, sym, bar, sig, plan) {
+  const p = acct.positions[sym], d = p.dir;
+  let changed = false, exited = false;
+  if (plan.liqFirst) {
+    closePart(acct, sym, plan.bankrupt, p.qty, bar.time, 'LIQ');
+    acct.equity = Math.max(0, acct.equity);
+    return { changed: true, exited: true };
   }
-  if (!state.pos && !justExited && sig.side !== 'wait' && sig.trigger && sig.htfOk && sig.sessionOk) {
-    if (openPos(state, sig.side, bar, sig.slPrice ?? sig.stLine)) changed = true;
+  if (plan.hitSL) {
+    closePart(acct, sym, plan.slFill, p.qty, bar.time, p.tp1Hit ? 'TRAIL' : 'SL');
+    return { changed: true, exited: true };
   }
-  const q = state.pos;
-  markDD(state, q ? state.equity + (bar.close - q.entry) * q.qty * q.dir : state.equity);
+  if (!p.tp1Hit && (d === 1 ? bar.high >= p.tp1 : bar.low <= p.tp1)) {
+    closePart(acct, sym, p.tp1, p.qty * 0.5, bar.time, 'TP1');
+    if (acct.positions[sym]) { p.tp1Hit = true; p.sl = p.be; }
+    changed = true;
+  }
+  if (acct.positions[sym] && sig.stDir != null && sig.stDir !== d && sig.flipExit !== false) {
+    closePart(acct, sym, bar.close, p.qty, bar.time, 'FLIP');
+    exited = true; changed = true;
+  } else if (acct.positions[sym] && p.tp1Hit && sig.stDir === d && sig.stLine != null) {
+    const ns = d === 1 ? Math.max(p.sl, sig.stLine) : Math.min(p.sl, sig.stLine);
+    if (ns !== p.sl) { p.sl = ns; changed = true; }
+  }
+  return { changed, exited };
+}
+/* how this bar resolves against a position's stop / liquidation (SL-first on ambiguous bars) */
+function exitPlan(acct, p, bar) {
+  const d = p.dir;
+  const { liq, bankrupt } = liqPrices(acct, p);
+  const hitLiq = d === 1 ? bar.low <= liq : bar.high >= liq;
+  const hitSL = d === 1 ? bar.low <= p.sl : bar.high >= p.sl;
+  // a bar that opens through the stop fills at the open, not at the stop price
+  const slFill = d === 1 ? Math.min(p.sl, bar.open) : Math.max(p.sl, bar.open);
+  const liqFirst = hitLiq && (!hitSL || (d === 1 ? liq >= slFill : liq <= slFill));
+  const worstPx = liqFirst ? bankrupt : hitSL ? slFill : (d === 1 ? bar.low : bar.high);
+  return { liqFirst, hitSL, slFill, bankrupt, worstPx };
+}
+/* one timestamp for the whole account: exits for every coin first, then entries in coin order
+   until the open-position limit or the shared leverage cap is reached.
+   items: [{ sym, bar, sig }] for bars that closed at time t; opts: { riskPct, maxOpen, tpR, canEnter(sym) } */
+function portfolioStep(acct, t, items, opts) {
+  if (t <= acct.lastBarTime) return false;
+  acct.lastBarTime = t;
+  let changed = false;
+  const plans = {};
+  let worst = acct.equity;
+  for (const it of items) {
+    const p = acct.positions[it.sym]; if (!p) continue;
+    plans[it.sym] = exitPlan(acct, p, it.bar);
+    worst += (plans[it.sym].worstPx - p.entry) * p.qty * p.dir;
+  }
+  markDD(acct, worst);
+  const exited = new Set();
+  for (const it of items) {
+    if (!acct.positions[it.sym]) continue;
+    const r = managePos(acct, it.sym, it.bar, it.sig, plans[it.sym]);
+    if (r.changed) changed = true;
+    if (r.exited) exited.add(it.sym);
+  }
+  for (const it of items) {
+    const s = it.sig;
+    if (openCount(acct) >= opts.maxOpen) break;
+    if (acct.positions[it.sym] || exited.has(it.sym) || s.side === 'wait' || !s.trigger || !s.htfOk || !s.sessionOk) continue;
+    if (opts.canEnter && !opts.canEnter(it.sym)) continue;
+    if (openPos(acct, it.sym, s.side, it.bar, s.slPrice ?? s.stLine, opts.riskPct, opts.tpR)) changed = true;
+  }
+  let mtm = acct.equity;
+  for (const it of items) { const p = acct.positions[it.sym]; if (p) mtm += (it.bar.close - p.entry) * p.qty * p.dir; }
+  markDD(acct, mtm);
   return changed;
+}
+/* signal used while a coin is still in indicator warmup: manage stops only, no entries, flips or trailing */
+const HOLD_SIG = { side: 'wait', trigger: false, stLine: null, stDir: null, htfOk: false, sessionOk: false, flipExit: false };
+
+/* ================= PORTFOLIO REPLAY (backtest) ================= */
+/* per-coin indicator passes for a data set, computed once and reused by every replay on it */
+const ctxCache = new WeakMap();
+function replayCtx(data) {
+  if (ctxCache.has(data)) return ctxCache.get(data);
+  const ctx = {}, times = new Set();
+  for (const s of Object.keys(data)) {
+    const { main, htf } = data[s];
+    const idx = new Map();
+    main.forEach((b, i) => { idx.set(b.time, i); times.add(b.time); });
+    ctx[s] = { main, htf, per: evaluate(main).per, bias: htfBiasSeries(htf), idx };
+  }
+  const out = { ctx, times: [...times].sort((a, b) => a - b) };
+  ctxCache.set(data, out);
+  return out;
+}
+/* replay every coin in data ({ sym: { main, htf } }) through one shared account.
+   opts: { prof, riskPct, maxOpen, sessionFilter } */
+function runPortfolio(data, tfKey, opts) {
+  const { ctx, times } = replayCtx(data);
+  const mainSec = TF_SEC[tfKey], htfSec = TF_SEC[HTF_MAP[tfKey]];
+  const syms = COINS.filter(s => ctx[s]); // fixed coin order decides who gets a slot on simultaneous signals
+  const htfAt = {};
+  for (const s of syms) htfAt[s] = htfIndexer(ctx[s].htf, mainSec, htfSec);
+  const acct = newAcct();
+  const stepOpts = { riskPct: opts.riskPct, maxOpen: opts.maxOpen, tpR: opts.prof.tpR ?? 1.5 };
+  for (const t of times) {
+    const items = [];
+    for (const s of syms) {
+      const c = ctx[s], i = c.idx.get(t);
+      if (i == null) continue;
+      const hi = htfAt[s](t);
+      items.push({ sym: s, bar: c.main[i], sig: c.per[i] ? sigAt(c.per, c.main, i, hi >= 0 ? c.bias[hi] : 0, opts.prof, opts.sessionFilter) : HOLD_SIG });
+    }
+    portfolioStep(acct, t, items, stepOpts);
+  }
+  // force-close whatever is still open at each coin's last close so metrics are complete
+  for (const s of Object.keys(acct.positions)) {
+    const m = ctx[s].main, last = m[m.length - 1];
+    closePart(acct, s, last.close, acct.positions[s].qty, last.time, 'EOB');
+  }
+  markDD(acct, acct.equity);
+  return acct;
+}
+
+/* round-trip stats (fills grouped per position) for the whole account and per coin */
+function btMetrics(acct) {
+  const byOpen = {};
+  for (const t of acct.trades) { const k = t.sym + '|' + t.openTime; (byOpen[k] = byOpen[k] || []).push(t); }
+  const rts = Object.values(byOpen).map(f => ({
+    sym: f[0].sym, pnl: f.reduce((s, x) => s + x.pnl, 0), risk: f[0].risk || null, riskPct: f[0].riskPct
+  }));
+  const sum = a => a.reduce((s, x) => s + x, 0);
+  const wins = rts.filter(r => r.pnl > 0), losses = rts.filter(r => r.pnl <= 0);
+  const grossW = sum(wins.map(r => r.pnl)), grossL = Math.abs(sum(losses.map(r => r.pnl)));
+  const withR = rts.filter(r => r.risk > 0);
+  const reasons = {};
+  for (const t of acct.trades) reasons[t.reason] = (reasons[t.reason] || 0) + 1;
+  const perCoin = {};
+  for (const r of rts) {
+    const c = perCoin[r.sym] = perCoin[r.sym] || { n: 0, wins: 0, pnl: 0, gw: 0, gl: 0 };
+    c.n++; c.pnl += r.pnl;
+    if (r.pnl > 0) { c.wins++; c.gw += r.pnl; } else c.gl -= r.pnl;
+  }
+  return {
+    n: rts.length,
+    wr: rts.length ? wins.length / rts.length : null,
+    pf: grossL > 0 ? grossW / grossL : (grossW > 0 ? Infinity : null),
+    avgR: withR.length ? sum(withR.map(r => r.pnl / r.risk)) / withR.length : null,
+    ret: (acct.equity - START_EQUITY) / START_EQUITY,
+    dd: acct.maxDD,
+    avgRiskPct: rts.length ? sum(rts.map(r => r.riskPct || 0)) / rts.length : null,
+    best: rts.length ? Math.max(...rts.map(r => r.pnl)) : null,
+    worst: rts.length ? Math.min(...rts.map(r => r.pnl)) : null,
+    reasons, perCoin
+  };
 }
 
 /* ================= PERSISTENCE ================= */
-function paperKey() { return `conflux2_paper_${tf}`; }
-function savePaper() { try { localStorage.setItem(paperKey(), JSON.stringify(paper)); } catch (e) {} }
-function loadPaper() {
+function acctKey() { return `conflux3_acct_${tf}`; }
+function saveAcct() { try { localStorage.setItem(acctKey(), JSON.stringify(acct)); } catch (e) {} }
+function loadAcct() {
   try {
-    const raw = localStorage.getItem(paperKey());
-    if (raw) {
-      paper = JSON.parse(raw);
-      if (paper.maxDD == null) { // saved before drawdown tracking: rebuild from closed-trade curve
-        let peak = START_EQUITY, dd = 0;
-        for (const c of paper.curve) { peak = Math.max(peak, c.value); dd = Math.max(dd, (peak - c.value) / peak); }
-        paper.peak = peak; paper.maxDD = dd;
-      }
-      return;
-    }
+    const raw = localStorage.getItem(acctKey());
+    if (raw) { acct = JSON.parse(raw); return; }
   } catch (e) {}
-  paper = newState();
+  acct = newAcct();
 }
-function saveSettings() { try { localStorage.setItem('conflux2_settings', JSON.stringify(settings)); } catch (e) {} }
+function saveSettings() { try { localStorage.setItem('conflux3_settings', JSON.stringify(settings)); } catch (e) {} }
 function loadSettings() {
-  try { const raw = localStorage.getItem('conflux2_settings'); if (raw) settings = { ...settings, ...JSON.parse(raw) }; } catch (e) {}
+  try {
+    const raw = localStorage.getItem('conflux3_settings');
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    settings = { ...settings, ...s, htfGate: { ...settings.htfGate, ...(s.htfGate || {}) } };
+    settings.coins = (Array.isArray(s.coins) ? s.coins : COINS).filter(c => COINS.includes(c));
+    if (!RISK_CHOICES.includes(settings.riskPct)) settings.riskPct = 1;
+    if (!MAX_OPEN_CHOICES.includes(settings.maxOpen)) settings.maxOpen = 4;
+  } catch (e) {}
 }
 
 /* ================= DATA ================= */
-async function fetchKlinesFor(interval) {
-  const qs = `/v5/market/kline?category=linear&symbol=${SYMBOL}&interval=${interval}&limit=${LIMIT}`;
+function M(sym) { return mkt[sym] || (mkt[sym] = { candles: [], htfCandles: [], liveBar: null, last: null, pct: null, ev: null, hb: null }); }
+const lastOf = a => a[a.length - 1];
+async function fetchKlines(sym, interval) {
+  const qs = `/v5/market/kline?category=linear&symbol=${sym}&interval=${interval}&limit=${LIMIT}`;
   for (const host of REST_HOSTS) {
     try {
       const res = await fetch(host + qs);
@@ -641,25 +839,94 @@ async function fetchKlinesFor(interval) {
   return null;
 }
 /* responses are dropped if the timeframe changed while the request was in flight */
-async function fetchAll() {
+async function fetchCoin(sym) {
   const want = tf;
-  const [main, htf] = await Promise.all([fetchKlinesFor(want), fetchKlinesFor(HTF_MAP[want])]);
+  const [main, htf] = await Promise.all([fetchKlines(sym, want), fetchKlines(sym, HTF_MAP[want])]);
   if (!main || want !== tf) return false;
-  liveBar = main[main.length - 1];
-  candles = main.slice(0, -1);
-  if (htf) htfCandles = htf.slice(0, -1); // closed HTF bars only
+  const m = M(sym);
+  m.liveBar = lastOf(main);
+  m.candles = main.slice(0, -1);
+  if (htf) m.htfCandles = htf.slice(0, -1); // closed HTF bars only
+  if (m.last == null) m.last = m.liveBar.close;
   return true;
 }
-async function refreshHTF() {
+async function fetchAllCoins() {
   const want = tf;
-  const htf = await fetchKlinesFor(HTF_MAP[want]);
-  if (htf && want === tf) htfCandles = htf.slice(0, -1);
+  const ok = await Promise.all(dataSyms().map(fetchCoin));
+  return want === tf && ok.some(Boolean);
 }
-function resync() { return fetchAll().then(ok => { if (ok) render(false); }); }
+async function refreshHTF(sym) {
+  const want = tf;
+  const htf = await fetchKlines(sym, HTF_MAP[want]);
+  if (htf && want === tf) M(sym).htfCandles = htf.slice(0, -1);
+}
+function resync(sym) {
+  return (sym ? fetchCoin(sym) : fetchAllCoins()).then(ok => { if (ok) scheduleRender(); });
+}
+
+/* indicator pass for a coin, cached until its candles change */
+function evalCoin(sym) {
+  const m = mkt[sym];
+  if (!m || m.candles.length < 210) return null;
+  const key = m.candles.length + ':' + lastOf(m.candles).time;
+  if (!m.ev || m.ev.key !== key) m.ev = { key, ...evaluate(m.candles) };
+  const hkey = m.htfCandles.length + ':' + (m.htfCandles.length ? lastOf(m.htfCandles).time : 0);
+  if (!m.hb || m.hb.key !== hkey) m.hb = { key: hkey, bias: htfBiasSeries(m.htfCandles) };
+  return m.ev;
+}
+/* signal on a coin's last closed bar, for display */
+function lastSig(sym) {
+  const ev = evalCoin(sym); if (!ev) return null;
+  const m = mkt[sym], i = m.candles.length - 1;
+  const hi = htfIndexer(m.htfCandles, TF_SEC[tf], TF_SEC[HTF_MAP[tf]])(m.candles[i].time);
+  const bias = hi >= 0 ? m.hb.bias[hi] : 0;
+  const p = ev.per[i];
+  return p ? { p, bias, sig: sigAt(ev.per, m.candles, i, bias, profFor(tf), settings.sessionFilter) } : null;
+}
+
+/* ================= LIVE PAPER ACCOUNT ================= */
+/* replay every closed bar the account hasn't seen yet, all coins in lockstep
+   (catches up after reloads, tab sleep and WS gaps; waits for coins that are a bar behind) */
+function processAcct() {
+  let syms = tradeSyms().filter(s => evalCoin(s));
+  if (!syms.length) return;
+  const newest = Math.max(...syms.map(s => lastOf(mkt[s].candles).time));
+  // a coin more than a bar behind gets reloaded (at most every 30s); without an open position it is
+  // skipped meanwhile so it can't stall the others, with one the account waits so no stop check is missed
+  const lagging = syms.filter(s => lastOf(mkt[s].candles).time < newest - TF_SEC[tf]);
+  for (const s of lagging) {
+    const m = mkt[s];
+    if (!m.resyncAt || Date.now() - m.resyncAt > 30000) { m.resyncAt = Date.now(); resync(s); }
+  }
+  syms = syms.filter(s => !lagging.includes(s) || acct.positions[s]);
+  const upTo = Math.min(...syms.map(s => lastOf(mkt[s].candles).time));
+  // first run on this TF: trade live-forward from the latest closed bar (no backfill farming)
+  if (!acct.lastBarTime) acct.lastBarTime = upTo - 1;
+  if (upTo <= acct.lastBarTime) return;
+  const prof = profFor(tf);
+  const ctx = syms.map(s => {
+    const m = mkt[s], idx = new Map();
+    m.candles.forEach((b, i) => { if (b.time > acct.lastBarTime && b.time <= upTo) idx.set(b.time, i); });
+    return { s, m, idx, htfAt: htfIndexer(m.htfCandles, TF_SEC[tf], TF_SEC[HTF_MAP[tf]]) };
+  });
+  const times = [...new Set(ctx.flatMap(c => [...c.idx.keys()]))].sort((a, b) => a - b);
+  const opts = { riskPct: settings.riskPct, maxOpen: settings.maxOpen, tpR: prof.tpR ?? 1.5, canEnter: s => settings.coins.includes(s) };
+  for (const t of times) {
+    const items = [];
+    for (const c of ctx) {
+      const i = c.idx.get(t); if (i == null) continue;
+      const hi = c.htfAt(t);
+      const per = c.m.ev.per;
+      items.push({ sym: c.s, bar: c.m.candles[i], sig: per[i] ? sigAt(per, c.m.candles, i, hi >= 0 ? c.m.hb.bias[hi] : 0, prof, settings.sessionFilter) : HOLD_SIG });
+    }
+    portfolioStep(acct, t, items, opts);
+  }
+  saveAcct();
+}
 
 /* ================= MARKET PULSE ================= */
 const PRESSURE_WINDOW = 5 * 60 * 1000; // 5m rolling, ms
-let tradeBuf = [];                      // { t(ms), v(BTC), buy(bool) }
+let tradeBuf = [];                      // { t(ms), v(base coin), buy(bool) } for the coin on the chart
 let lastPressRender = 0;
 
 async function fetchFng() {
@@ -695,12 +962,13 @@ async function fetchGlobal() {
 }
 
 async function seedPressure() {
-  const qs = `/v5/market/recent-trade?category=linear&symbol=${SYMBOL}&limit=1000`;
+  const sym = viewSym;
+  const qs = `/v5/market/recent-trade?category=linear&symbol=${sym}&limit=1000`;
   for (const host of REST_HOSTS) {
     try {
       const r = await fetch(host + qs);
       const j = await r.json();
-      if (j.retCode === 0 && j.result?.list) {
+      if (j.retCode === 0 && j.result?.list && sym === viewSym) {
         const now = Date.now();
         tradeBuf = j.result.list
           .map(t => ({ t: +t.time, v: +t.size, buy: t.side === 'Buy' }))
@@ -721,12 +989,13 @@ function renderPressure(force = false) {
   for (const t of tradeBuf) { if (t.buy) buy += t.v; else sell += t.v; }
   const tot = buy + sell;
   const bEl = $('pressBuy'), sEl = $('pressSell');
+  $('pressCoin').textContent = coinName(viewSym);
   if (tot <= 0) { bEl.style.width = '50%'; bEl.textContent = 'BUY —'; sEl.textContent = '— SELL'; $('pressVol').textContent = 'no flow'; return; }
   const bp = buy / tot * 100;
   bEl.style.width = Math.max(8, Math.min(92, bp)) + '%';
   bEl.textContent = `BUY ${bp.toFixed(1)}%`;
   sEl.textContent = `${(100 - bp).toFixed(1)}% SELL`;
-  $('pressVol').textContent = tot.toFixed(1) + ' BTC';
+  $('pressVol').textContent = fmtQty(tot) + ' ' + coinName(viewSym);
 }
 
 setInterval(fetchGlobal, 5 * 60 * 1000);
@@ -734,42 +1003,70 @@ setInterval(fetchFng, 30 * 60 * 1000);
 setInterval(() => renderPressure(), 2000);          // keeps decaying when flow is quiet
 setInterval(() => { if (wsAlive) return; seedPressure(); }, 60 * 1000); // REST fallback if WS down
 
+/* ================= WEBSOCKET ================= */
+function wantedTopics() {
+  const t = new Set();
+  for (const s of COINS) t.add(`tickers.${s}`); // prices for the whole coin list
+  for (const s of dataSyms()) t.add(`kline.${tf}.${s}`);
+  t.add(`publicTrade.${viewSym}`);
+  return t;
+}
+function wsSend(op, args) { for (let i = 0; i < args.length; i += 10) ws.send(JSON.stringify({ op, args: args.slice(i, i + 10) })); }
+/* bring the socket's subscriptions in line with the coins, timeframe and chart we need */
+function syncSubs() {
+  if (!ws || ws.readyState !== 1) return;
+  const want = wantedTopics();
+  const drop = [...wsTopics].filter(x => !want.has(x)), add = [...want].filter(x => !wsTopics.has(x));
+  try { if (drop.length) wsSend('unsubscribe', drop); if (add.length) wsSend('subscribe', add); } catch (e) {}
+  wsTopics = want;
+}
+let renderTimer = null;
+function scheduleRender() { clearTimeout(renderTimer); renderTimer = setTimeout(() => render(false), 300); } // coins close in a burst
+
 function connectWS() {
   try { if (ws) { ws.onclose = null; clearInterval(ws._ping); ws.close(); } } catch (e) {}
   ws = new WebSocket(WS_URL);
   ws.onopen = () => {
     wsAlive = true; setConn(true);
-    if (wsResync) { wsResync = false; resync(); } // reload bars that closed while the socket was down
-    ws.send(JSON.stringify({ op: 'subscribe', args: [`tickers.${SYMBOL}`, `kline.${tf}.${SYMBOL}`, `publicTrade.${SYMBOL}`] }));
+    wsTopics = new Set(); syncSubs();
     ws._ping = setInterval(() => { try { ws.send(JSON.stringify({ op: 'ping' })); } catch (e) {} }, 20000);
+    if (wsResync) { wsResync = false; resync(); } // reload bars that closed while the socket was down
   };
   ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
-    if (msg.topic === `tickers.${SYMBOL}` && msg.data) {
-      const d = msg.data;
-      if (d.lastPrice) updateTicker(+d.lastPrice, d.price24hPcnt != null ? +d.price24hPcnt : null);
-    }
-    if (msg.topic === `publicTrade.${SYMBOL}` && msg.data) {
+    const topic = msg.topic || '';
+    if (!msg.data) return;
+    if (topic.startsWith('tickers.')) {
+      const sym = topic.slice(8), d = msg.data, m = M(sym);
+      if (d.lastPrice) m.last = +d.lastPrice;
+      if (d.price24hPcnt != null) m.pct = +d.price24hPcnt;
+      if (sym === viewSym && d.lastPrice) updateTicker(m.last, m.pct);
+      updateCoinPrice(sym);
+      updatePosUPnL(sym);
+    } else if (topic === `publicTrade.${viewSym}`) {
       for (const t of msg.data) tradeBuf.push({ t: +t.T, v: +t.v, buy: t.S === 'Buy' });
       renderPressure();
-    }
-    if (msg.topic === `kline.${tf}.${SYMBOL}` && msg.data) {
+    } else if (topic.startsWith('kline.')) {
+      const [, interval, sym] = topic.split('.');
+      if (interval !== tf) return;
+      const m = M(sym);
       for (const k of msg.data) {
         const bar = { time: Math.floor(+k.start / 1000), open: +k.open, high: +k.high, low: +k.low, close: +k.close, volume: +k.volume };
         if (k.confirm) {
-          if (candles.length && bar.time - candles[candles.length - 1].time > TF_SEC[tf]) {
-            resync(); // missed a closed bar: reload history instead of appending across a gap
-          } else if (!candles.length || bar.time > candles[candles.length - 1].time) {
-            candles.push(bar);
-            if (candles.length > LIMIT) candles.shift();
-            liveBar = null;
-            refreshHTF().finally(() => render(false));
+          if (m.candles.length && bar.time - lastOf(m.candles).time > TF_SEC[tf]) {
+            resync(sym); // missed a closed bar: reload history instead of appending across a gap
+          } else if (m.candles.length && bar.time > lastOf(m.candles).time) {
+            m.candles.push(bar);
+            if (m.candles.length > LIMIT) m.candles.shift();
+            m.liveBar = null;
+            refreshHTF(sym).finally(scheduleRender);
           }
         } else {
-          liveBar = bar;
-          candleSeries && candleSeries.update(bar);
-          volSeries && volSeries.update({ time: bar.time, value: bar.volume, color: bar.close >= bar.open ? 'rgba(34,212,126,0.35)' : 'rgba(255,77,94,0.35)' });
-          updatePosUPnL(bar.close);
+          m.liveBar = bar;
+          if (sym === viewSym && candleSeries) {
+            candleSeries.update(bar);
+            volSeries.update({ time: bar.time, value: bar.volume, color: bar.close >= bar.open ? 'rgba(34,212,126,0.35)' : 'rgba(255,77,94,0.35)' });
+          }
         }
       }
     }
@@ -783,10 +1080,13 @@ setInterval(() => { if (!wsAlive) resync(); }, 30000);
 const $ = id => document.getElementById(id);
 let lastPrice = null;
 function fmt(n, d = 1) { return n == null ? '—' : n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+function pxDigits(p) { const a = Math.abs(p || 0); return a >= 10000 ? 1 : a >= 100 ? 2 : a >= 10 ? 3 : a >= 1 ? 4 : 5; }
+function fmtPx(n) { return n == null ? '—' : fmt(n, pxDigits(n)); }
+function fmtQty(q) { return q >= 100 ? fmt(q, 0) : q >= 1 ? q.toFixed(2) : q.toFixed(4); }
 function setConn(ok) { $('conn').classList.toggle('ok', ok); }
 function updateTicker(p, pct) {
   const el = $('price');
-  el.textContent = fmt(p);
+  el.textContent = fmtPx(p);
   if (lastPrice != null) { el.classList.toggle('up', p > lastPrice); el.classList.toggle('down', p < lastPrice); }
   lastPrice = p;
   if (pct != null) {
@@ -819,6 +1119,48 @@ function initCharts() {
   });
 }
 
+/* ---- coin list ---- */
+function initCoinList() {
+  $('coinRows').innerHTML = COINS.map(s => `
+    <div class="coin-row" data-sym="${s}">
+      <input type="checkbox" class="coin-on" title="Trade this coin" aria-label="Trade ${coinName(s)}">
+      <span class="nm">${coinName(s)}</span>
+      <span class="px" id="px-${s}">—</span>
+      <span class="c24" id="c24-${s}">—</span>
+      <span class="tag" id="setup-${s}">—</span>
+      <span class="tag" id="pos-${s}">—</span>
+    </div>`).join('');
+}
+function updateCoinPrice(sym) {
+  const m = mkt[sym]; if (!m) return;
+  const px = $('px-' + sym), c = $('c24-' + sym);
+  if (px && m.last != null) px.textContent = fmtPx(m.last);
+  if (c && m.pct != null) { c.textContent = (m.pct >= 0 ? '+' : '') + (m.pct * 100).toFixed(2) + '%'; c.className = 'c24 ' + (m.pct >= 0 ? 'pos' : 'neg'); }
+}
+function renderCoins() {
+  let ready = 0;
+  for (const s of COINS) {
+    const row = document.querySelector(`.coin-row[data-sym="${s}"]`);
+    row.classList.toggle('viewing', s === viewSym);
+    row.classList.toggle('off', !settings.coins.includes(s));
+    row.querySelector('.coin-on').checked = settings.coins.includes(s);
+    updateCoinPrice(s);
+    const st = lastSig(s), el = $('setup-' + s);
+    if (!st) { el.textContent = '—'; el.className = 'tag'; }
+    else {
+      const g = st.sig, live = g.side !== 'wait' && g.trigger && g.htfOk && g.sessionOk;
+      el.textContent = g.side === 'wait' ? `WAIT ${g.score}/5` : `${g.side.toUpperCase()} ${g.score}/5`;
+      el.className = 'tag ' + (g.side === 'wait' ? '' : g.side + (live ? ' live' : ''));
+      if (live && settings.coins.includes(s) && !acct.positions[s]) ready++;
+    }
+    const p = acct.positions[s], pe = $('pos-' + s);
+    pe.textContent = p ? p.side.toUpperCase() : '—';
+    pe.className = 'tag ' + (p ? p.side + ' live' : '');
+  }
+  $('coinInfo').textContent = `${settings.coins.length} / ${COINS.length} traded`;
+  return ready;
+}
+
 function setCond(id, state, valText) {
   const el = $('c-' + id);
   el.classList.remove('pass-long', 'pass-short');
@@ -827,74 +1169,58 @@ function setCond(id, state, valText) {
   $('v-' + id).textContent = valText;
 }
 
-function updatePosUPnL(price) {
-  const el = $('upnl');
-  if (!el || !paper || !paper.pos) return;
-  const p = paper.pos;
-  const u = (price - p.entry) * p.qty * p.dir;
+function updatePosUPnL(sym) {
+  const el = $('upnl-' + sym), p = acct && acct.positions[sym], m = mkt[sym];
+  if (!el || !p || !m || m.last == null) return;
+  const u = (m.last - p.entry) * p.qty * p.dir;
   el.textContent = (u >= 0 ? '+' : '') + u.toFixed(2) + ' USDT';
   el.style.color = u >= 0 ? 'var(--long)' : 'var(--short)';
 }
 
 function renderPaperPanel() {
-  const eq = paper.equity;
-  $('riskLabel').textContent = `${paper.riskPct ?? RISK_PCT}% target risk` +
-    (paper.pos && paper.pos.riskPct != null ? ` · ${paper.pos.riskPct.toFixed(1)}% actual` : '') +
-    (eq <= MIN_EQUITY ? ' · ACCOUNT BLOWN' : '');
+  const eq = acct.equity;
   $('eq').textContent = fmt(eq, 2);
   const total = eq - START_EQUITY;
   const ep = $('eqPnl');
   ep.textContent = (total >= 0 ? '+' : '') + total.toFixed(2) + ' USDT';
   ep.className = 'eq-pnl ' + (total >= 0 ? 'pos' : 'neg');
 
-  const area = $('posArea');
-  if (paper.pos) {
-    const p = paper.pos;
-    area.innerHTML =
-      `<div class="pos-card">
-        <div class="pos-head ${p.side}"><span>${p.side.toUpperCase()} · ${p.qty.toFixed(4)} BTC</span><span>${p.tp1Hit ? 'TRAILING' : 'INITIAL'}</span></div>
-        <div class="pos-grid">
-          <div class="pos-cell"><div class="k">ENTRY</div><div class="v">${fmt(p.entry)}</div></div>
-          <div class="pos-cell"><div class="k">uPNL</div><div class="v" id="upnl">—</div></div>
-          <div class="pos-cell"><div class="k">STOP ${p.tp1Hit ? '(TRAIL)' : ''}</div><div class="v" style="color:var(--short)">${fmt(p.sl)}</div></div>
-          <div class="pos-cell"><div class="k">${p.tp1Hit ? 'TP1 DONE ✓' : `TP1 · ${p.tpR ?? 1.5}R`}</div><div class="v" style="color:var(--long)">${fmt(p.tp1)}</div></div>
-          <div class="pos-cell"><div class="k">RISK AT ENTRY</div><div class="v">${p.actualRisk.toFixed(2)} USDT${p.riskPct != null ? ` · ${p.riskPct.toFixed(1)}%` : ''}</div></div>
-          <div class="pos-cell"><div class="k">LIQ (CROSS)</div><div class="v">${(() => { const l = liqPrices(paper).liq; return l > 0 ? fmt(l) : 'none'; })()}</div></div>
-        </div>
-      </div>`;
-    if (lastPrice) updatePosUPnL(lastPrice);
-  } else {
-    area.innerHTML = '<div class="flat">Flat — waiting for a gated entry trigger.</div>';
-  }
+  const pos = Object.values(acct.positions);
+  const openRisk = pos.reduce((s, p) => s + (p.tp1Hit ? 0 : p.riskPct || 0), 0);
+  $('openInfo').textContent = `${pos.length} / ${settings.maxOpen} open · ${openRisk.toFixed(1)}% at risk` + (eq <= MIN_EQUITY ? ' · ACCOUNT BLOWN' : '');
+  $('posArea').innerHTML = pos.length ? pos.map(p => `
+    <div class="pos-card">
+      <div class="pos-head ${p.side}"><span>${coinName(p.sym)} ${p.side.toUpperCase()} · ${fmtQty(p.qty)}</span><span>${p.tp1Hit ? 'TRAILING' : 'INITIAL'}</span></div>
+      <div class="pos-grid">
+        <div class="pos-cell"><div class="k">ENTRY</div><div class="v">${fmtPx(p.entry)}</div></div>
+        <div class="pos-cell"><div class="k">uPNL</div><div class="v" id="upnl-${p.sym}">—</div></div>
+        <div class="pos-cell"><div class="k">STOP ${p.tp1Hit ? '(TRAIL)' : ''}</div><div class="v" style="color:var(--short)">${fmtPx(p.sl)}</div></div>
+        <div class="pos-cell"><div class="k">${p.tp1Hit ? 'TP1 DONE ✓' : `TP1 · ${p.tpR}R`}</div><div class="v" style="color:var(--long)">${fmtPx(p.tp1)}</div></div>
+        <div class="pos-cell"><div class="k">RISK AT ENTRY</div><div class="v">${p.actualRisk.toFixed(2)} USDT · ${p.riskPct.toFixed(1)}%</div></div>
+        <div class="pos-cell"><div class="k">LIQ (CROSS)</div><div class="v">${(() => { const l = liqPrices(acct, p).liq; return l > 0 ? fmtPx(l) : 'none'; })()}</div></div>
+      </div>
+    </div>`).join('') : '<div class="flat">Flat — waiting for a gated entry trigger on a traded coin.</div>';
+  pos.forEach(p => updatePosUPnL(p.sym));
 
   // trades list + stats
   const hist = $('hist');
-  if (paper.trades.length) {
-    hist.innerHTML = paper.trades.slice(-30).reverse().map(t =>
-      `<div class="hrow">
-        <span class="side ${t.side}">${t.side.toUpperCase()}</span>
-        <span><span class="pnl ${t.pnl >= 0 ? 'pos' : 'neg'}">${t.pnl >= 0 ? '+' : ''}${t.pnl.toFixed(2)}</span> · ${t.reason} @ ${fmt(t.exit)}</span>
-        <span class="t">${new Date(t.closeTime * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-      </div>`).join('');
-  } else {
-    hist.innerHTML = '<div class="empty">No trades yet. Engine runs live-forward from first load.</div>';
-  }
+  hist.innerHTML = acct.trades.length ? acct.trades.slice(-40).reverse().map(t =>
+    `<div class="hrow">
+      <span class="side ${t.side}">${coinName(t.sym)} ${t.side === 'long' ? 'L' : 'S'}</span>
+      <span><span class="pnl ${t.pnl >= 0 ? 'pos' : 'neg'}">${t.pnl >= 0 ? '+' : ''}${t.pnl.toFixed(2)}</span> · ${t.reason} @ ${fmtPx(t.exit)}</span>
+      <span class="t">${new Date(t.closeTime * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+    </div>`).join('') : '<div class="empty">No trades yet. Engine runs live-forward from first load.</div>';
 
-  // group fills into round trips by openTime for win rate
-  const byOpen = {};
-  for (const t of paper.trades) { (byOpen[t.openTime] = byOpen[t.openTime] || []).push(t); }
-  const rts = Object.values(byOpen).map(fills => fills.reduce((s, f) => s + f.pnl, 0));
-  const wins = rts.filter(x => x > 0).length;
-  $('s-n').textContent = rts.length;
-  $('s-wr').textContent = rts.length ? Math.round(wins / rts.length * 100) + '%' : '—';
+  const m = btMetrics({ ...acct, equity: acct.equity }); // same round-trip grouping as the backtest
+  $('s-n').textContent = m.n;
+  $('s-wr').textContent = m.wr != null ? Math.round(m.wr * 100) + '%' : '—';
   const sp = $('s-pnl');
-  sp.textContent = rts.length ? (total >= 0 ? '+' : '') + total.toFixed(1) : '—';
+  sp.textContent = m.n ? (total >= 0 ? '+' : '') + total.toFixed(1) : '—';
   sp.style.color = total >= 0 ? 'var(--long)' : 'var(--short)';
-  $('s-dd').textContent = paper.trades.length || paper.maxDD > 0 ? ((paper.maxDD || 0) * 100).toFixed(1) + '%' : '—';
+  $('s-dd').textContent = m.n || acct.maxDD > 0 ? (acct.maxDD * 100).toFixed(1) + '%' : '—';
 
-  // equity curve (skip while backtest view is showing)
   if (!btView) {
-    const pts = [{ time: Math.floor((paper.startedAt || Date.now()) / 1000), value: START_EQUITY }, ...paper.curve];
+    const pts = [{ time: Math.floor((acct.startedAt || Date.now()) / 1000), value: START_EQUITY }, ...acct.curve];
     const dedup = []; let lastT = 0;
     for (const p2 of pts) { const t2 = p2.time <= lastT ? lastT + 1 : p2.time; dedup.push({ time: t2, value: p2.value }); lastT = t2; }
     eqSeries.setData(dedup);
@@ -902,19 +1228,32 @@ function renderPaperPanel() {
   }
 }
 
-function render(fitContent = false) {
-  if (candles.length < 210) return;
-  const { per, e50, e200, st } = evaluate(candles);
+/* chart, verdict and confluence stack for the coin being viewed */
+function renderView(fitContent = false) {
+  const m = mkt[viewSym], ev = evalCoin(viewSym);
+  $('chartSym').textContent = coinName(viewSym);
+  $('hdrSym').textContent = coinName(viewSym);
+  $('viewSym').textContent = coinName(viewSym);
+  if (!ev) {
+    $('badge').className = 'verdict-badge wait'; $('badge').textContent = 'WAIT';
+    $('badgeNote').textContent = 'Loading ' + coinName(viewSym) + ' data…';
+    return;
+  }
+  const { per, e50, e200, st } = ev;
+  const candles = m.candles;
+  const digits = pxDigits(lastOf(candles).close);
+  const pf = { priceFormat: { type: 'price', precision: digits, minMove: Math.pow(10, -digits) } };
+  [candleSeries, ema50Series, ema200Series, stSeries].forEach(s => s.applyOptions(pf));
 
-  const chartBars = liveBar ? [...candles, liveBar] : candles;
+  const chartBars = m.liveBar ? [...candles, m.liveBar] : candles;
   candleSeries.setData(chartBars);
   volSeries.setData(chartBars.map(c => ({ time: c.time, value: c.volume, color: c.close >= c.open ? 'rgba(34,212,126,0.35)' : 'rgba(255,77,94,0.35)' })));
   ema50Series.setData(candles.map((c, i) => e50[i] != null ? { time: c.time, value: e50[i] } : null).filter(Boolean));
   ema200Series.setData(candles.map((c, i) => e200[i] != null ? { time: c.time, value: e200[i] } : null).filter(Boolean));
   stSeries.setData(candles.map((c, i) => st.line[i] != null ? { time: c.time, value: st.line[i], color: st.dir[i] === 1 ? '#22d47e' : '#ff4d5e' } : null).filter(Boolean));
 
-  // historical trigger markers (raw signals; live gates apply to paper entries only)
-  const prof = TF_PROFILE[tf];
+  // historical setup markers (raw signals; gates apply to paper entries only)
+  const prof = profFor(tf);
   const markers = [];
   for (let i = 1; i < per.length; i++) {
     const p = per[i]; if (!p) continue;
@@ -929,31 +1268,25 @@ function render(fitContent = false) {
     }
   }
   candleSeries.setMarkers(markers.slice(-60));
-  if (fitContent) chart.timeScale().scrollToRealTime(); // only on load / TF switch, so browsing history isn't yanked back
+  if (fitContent) chart.timeScale().scrollToRealTime(); // only on load / TF or coin switch
 
-  // ---- last closed bar state ----
-  const p = per[per.length - 1];
-  const v = verdictFor(p, prof.minScore);
-  const c = candles[candles.length - 1];
+  const { p, bias, sig } = lastSig(viewSym);
+  const c = lastOf(candles);
   $('closedTime').textContent = new Date(c.time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-  const biasArr = htfBiasSeries(htfCandles);
-  const htfLast = htfIndexer(htfCandles, TF_SEC[tf], TF_SEC[HTF_MAP[tf]])(c.time);
-  const bias = htfLast >= 0 ? biasArr[htfLast] : 0;
-  const sig = sigAt(per, candles, per.length - 1, bias, prof, settings.sessionFilter);
   const { sessionOk, htfOk } = sig;
+  const v = { side: sig.side, score: sig.score };
 
   setCond('regime', p.conds.regime, p.conds.regime === 1 ? 'BULL' : 'BEAR');
   setCond('struct', p.conds.struct, p.conds.struct === 1 ? 'ABOVE' : 'BELOW');
-  setCond('st', p.conds.st, (p.conds.st === 1 ? 'UP · ' : 'DOWN · ') + fmt(p.stLine, 0));
-  setCond('mom', p.conds.mom, `RSI ${p.rsi.toFixed(1)} · H ${p.hist >= 0 ? '+' : ''}${p.hist.toFixed(1)}`);
+  setCond('st', p.conds.st, (p.conds.st === 1 ? 'UP · ' : 'DOWN · ') + fmtPx(p.stLine));
+  setCond('mom', p.conds.mom, `RSI ${p.rsi.toFixed(1)} · H ${p.hist >= 0 ? '+' : ''}${p.hist.toPrecision(3)}`);
   setCond('vol', p.conds.vol === 2 ? (v.side === 'short' ? -1 : 1) : 0, `${(p.vol / p.vAvg).toFixed(2)}×`);
   $('htfName').textContent = TF_LABEL[HTF_MAP[tf]];
-  setCond('htf', bias, bias === 1 ? 'BULL' : bias === -1 ? 'BEAR' : 'MIXED');
+  setCond('htf', bias, (bias === 1 ? 'BULL' : bias === -1 ? 'BEAR' : 'MIXED') + (prof.htfGate === false ? ' · OFF' : ''));
 
   const gH = $('g-htf');
-  gH.textContent = 'HTF ' + (bias === 1 ? 'BULL' : bias === -1 ? 'BEAR' : 'MIXED');
-  gH.className = 'gate ' + (v.side === 'wait' ? '' : htfOk ? 'ok' : 'block');
+  gH.textContent = prof.htfGate === false ? 'HTF GATE OFF' : 'HTF ' + (bias === 1 ? 'BULL' : bias === -1 ? 'BEAR' : 'MIXED');
+  gH.className = 'gate ' + (v.side === 'wait' || prof.htfGate === false ? '' : htfOk ? 'ok' : 'block');
   const gS = $('g-sess');
   gS.textContent = settings.sessionFilter ? (sessionOk ? 'SESSION OK' : 'DEAD ZONE 02–06 UTC') : 'SESSION FILTER OFF';
   gS.className = 'gate ' + (settings.sessionFilter ? (sessionOk ? 'ok' : 'block') : '');
@@ -964,54 +1297,49 @@ function render(fitContent = false) {
   let note = v.side === 'wait' ? 'Conditions not aligned — stay flat' : `Confluence ${v.score}/5 on closed ${TF_LABEL[tf]} candle`;
   if (v.side !== 'wait' && !htfOk) note += ' · BLOCKED BY HTF';
   if (v.side !== 'wait' && !sessionOk) note += ' · BLOCKED BY SESSION';
+  if (!settings.coins.includes(viewSym)) note += ' · NOT TRADED';
   $('badgeNote').textContent = note;
 
   const trig = $('trigger');
   trig.className = 'trigger-flag';
-  const recentTrigger = sig.trigger;
-  if (v.side !== 'wait' && recentTrigger && htfOk && sessionOk) trig.classList.add(v.side);
+  if (v.side !== 'wait' && sig.trigger && htfOk && sessionOk) trig.classList.add(v.side);
 
   const fill = $('scoreFill');
   const score = v.side === 'short' ? p.shortScore : p.longScore;
   fill.style.width = (score / 5 * 100) + '%';
   fill.style.background = v.side === 'long' ? 'var(--long)' : v.side === 'short' ? 'var(--short)' : 'var(--wait)';
   $('scoreLabel').textContent = `CONFLUENCE ${score} / 5 · NEED ${prof.minScore} · ${v.side.toUpperCase()}`;
+}
 
-  // ---- paper engine: process every closed bar not seen yet (catches up after reloads, tab sleep, WS gaps) ----
-  paper.riskPct = prof.riskPct ?? RISK_PCT;
-  paper.tpR = prof.tpR ?? 1.5;
-  const htfAt = htfIndexer(htfCandles, TF_SEC[tf], TF_SEC[HTF_MAP[tf]]);
-  const startT = paper.lastBarTime;
-  for (let i = 0; i < candles.length; i++) {
-    if (candles[i].time <= paper.lastBarTime) continue;
-    const hi = htfAt(candles[i].time);
-    // bars before indicator warmup still get SL/TP/liquidation checks, just no entries, flips or trailing
-    const s = per[i]
-      ? sigAt(per, candles, i, hi >= 0 ? biasArr[hi] : 0, prof, settings.sessionFilter)
-      : { side: 'wait', trigger: false, stLine: null, stDir: null, htfOk: false, sessionOk: false, flipExit: false };
-    paperStep(paper, candles[i], s);
-  }
-  if (paper.lastBarTime !== startT) savePaper();
+function renderSettings() {
+  $('riskSel').value = String(settings.riskPct);
+  $('maxSel').value = String(settings.maxOpen);
+  $('sessSwitch').classList.toggle('on', settings.sessionFilter);
+  $('htfSwitch').classList.toggle('on', profFor(tf).htfGate !== false);
+  $('setTf').textContent = TF_LABEL[tf];
+  const prof = profFor(tf);
+  $('setNote').textContent = `Up to ${(settings.riskPct * settings.maxOpen).toFixed(2).replace(/\.?0+$/, '')}% of equity at risk at once (${settings.riskPct}% × ${settings.maxOpen}). ` +
+    `${TF_LABEL[tf]} rules: ${prof.minScore}/5 confluence, stop ${prof.slAtr != null ? prof.slAtr + '×ATR' : 'at Supertrend'}, TP1 ${prof.tpR}R, flip exit ${prof.flipExit ? 'on' : 'off'}.`;
+}
+
+function render(fitContent = false) {
+  processAcct(); // trade first: the account doesn't depend on which coin is on the chart
+  const ready = renderCoins();
+  renderView(fitContent);
+  renderSettings();
   renderPaperPanel();
-
-  if (v.side !== 'wait' && htfOk && sessionOk && recentTrigger) {
-    document.title = `● ${v.side.toUpperCase()} · CONFLUX v2`;
-  } else {
-    document.title = 'CONFLUX v2 · BTCUSDT.P';
-  }
+  document.title = ready ? `● ${ready} SETUP${ready > 1 ? 'S' : ''} · CONFLUX` : 'CONFLUX v3 · MULTI-COIN';
 }
 
 /* ================= BACKTEST ================= */
-const TF_SEC = { '5': 300, '15': 900, '30': 1800, '60': 3600, '240': 14400, 'D': 86400 };
-const BT_BARS_MAP = { '5': 3000, '15': 3000, '30': 4000, '60': 5000, '240': 8000 };
 let btView = false;
 
-async function fetchDeep(interval, target) {
+async function fetchDeep(sym, interval, target) {
   let all = [];
   let end = Date.now();
   const maxPages = Math.ceil((target + 1) / 1000) + 1;
   for (let page = 0; page < maxPages && all.length < target + 1; page++) {
-    const qs = `/v5/market/kline?category=linear&symbol=${SYMBOL}&interval=${interval}&limit=1000&end=${end}`;
+    const qs = `/v5/market/kline?category=linear&symbol=${sym}&interval=${interval}&limit=1000&end=${end}`;
     let rows = null;
     for (const host of REST_HOSTS) {
       try {
@@ -1036,77 +1364,31 @@ async function fetchDeep(interval, target) {
   return out.slice(-target);
 }
 
-/* bias per HTF bar: 1 bull, -1 bear, 0 mixed/warmup */
-function htfBiasSeries(cs) {
-  const closes = cs.map(c => c.close);
-  const e50 = ema(closes, 50), e200 = ema(closes, 200);
-  const st = supertrend(cs, 10, 3);
-  return cs.map((_, i) => {
-    if (e200[i] == null || st.dir[i] == null) return 0;
-    if (e50[i] > e200[i] && st.dir[i] === 1) return 1;
-    if (e50[i] < e200[i] && st.dir[i] === -1) return -1;
-    return 0;
-  });
-}
-
-function runReplay(mainBars, htfBars, mainSec, htfSec, useSessionFilter, riskPct, profile) {
-  const prof = profile || { minScore: 4, flipExit: true };
-  const { per } = evaluate(mainBars);
-  const biasArr = htfBiasSeries(htfBars);
-  const htfAt = htfIndexer(htfBars, mainSec, htfSec);
-  const state = newState();
-  if (riskPct != null) state.riskPct = riskPct;
-  if (prof.tpR != null) state.tpR = prof.tpR;
-  for (let i = 0; i < mainBars.length; i++) {
-    const p = per[i]; if (!p) continue;
-    const hi = htfAt(mainBars[i].time);
-    paperStep(state, mainBars[i], sigAt(per, mainBars, i, hi >= 0 ? biasArr[hi] : 0, prof, useSessionFilter));
+let deepCache = { key: null, data: null };
+async function ensureDeepData(want, syms, needHtf, onProgress) {
+  const key = want + '|' + syms.join(',') + '|' + needHtf;
+  if (deepCache.key === key) return deepCache.data;
+  const htfInt = HTF_MAP[want];
+  const btBars = BT_BARS_MAP[want] || 3000;
+  const htfNeed = Math.max(1000, Math.ceil(btBars * TF_SEC[want] / TF_SEC[htfInt]) + 250);
+  const data = {};
+  let done = 0;
+  for (let i = 0; i < syms.length; i += 3) { // a few coins at a time, well under the exchange rate limit
+    await Promise.all(syms.slice(i, i + 3).map(async s => {
+      const [main, htf] = await Promise.all([fetchDeep(s, want, btBars), needHtf ? fetchDeep(s, htfInt, htfNeed) : Promise.resolve([])]);
+      if (main && main.length >= 300 && (!needHtf || htf.length >= 210)) data[s] = { main, htf };
+      onProgress && onProgress(++done, syms.length);
+    }));
   }
-  // force-close any open position at the last close so metrics are complete
-  if (state.pos) {
-    closePart(state, mainBars[mainBars.length - 1].close, state.pos.qty, mainBars[mainBars.length - 1].time, 'EOB');
-    markDD(state, state.equity);
-  }
-  return state;
+  if (!Object.keys(data).length) return null;
+  deepCache = { key, data };
+  return data;
 }
 
-function btMetrics(state) {
-  const byOpen = {};
-  for (const t of state.trades) { (byOpen[t.openTime] = byOpen[t.openTime] || []).push(t); }
-  const rts = Object.values(byOpen).map(fills => ({
-    pnl: fills.reduce((s, f) => s + f.pnl, 0),
-    risk: fills[0].risk || null,
-    riskPct: fills[0].riskPct,
-    reasons: fills.map(f => f.reason)
-  }));
-  const wins = rts.filter(r => r.pnl > 0);
-  const losses = rts.filter(r => r.pnl <= 0);
-  const grossW = wins.reduce((s, r) => s + r.pnl, 0);
-  const grossL = Math.abs(losses.reduce((s, r) => s + r.pnl, 0));
-  const withR = rts.filter(r => r.risk > 0);
-  const avgR = withR.length ? withR.reduce((s, r) => s + r.pnl / r.risk, 0) / withR.length : null;
-  const withRp = rts.filter(r => r.riskPct != null);
-  const avgRiskPct = withRp.length ? withRp.reduce((s, r) => s + r.riskPct, 0) / withRp.length : null;
-  const reasons = {};
-  for (const t of state.trades) reasons[t.reason] = (reasons[t.reason] || 0) + 1;
-  return {
-    n: rts.length,
-    wr: rts.length ? wins.length / rts.length : null,
-    pf: grossL > 0 ? grossW / grossL : (grossW > 0 ? Infinity : null),
-    avgR,
-    ret: (state.equity - START_EQUITY) / START_EQUITY,
-    dd: state.maxDD ?? 0,
-    avgRiskPct,
-    best: rts.length ? Math.max(...rts.map(r => r.pnl)) : null,
-    worst: rts.length ? Math.min(...rts.map(r => r.pnl)) : null,
-    reasons
-  };
-}
-
-function showBtCurve(state, info) {
+function showBtCurve(a, info) {
   btView = true;
   eqSeries.applyOptions({ lineColor: '#f5b53f', topColor: 'rgba(245,181,63,0.25)', bottomColor: 'rgba(245,181,63,0.02)' });
-  const pts = [{ time: state.curve.length ? state.curve[0].time - 1 : Math.floor(Date.now() / 1000), value: START_EQUITY }, ...state.curve];
+  const pts = [{ time: a.curve.length ? a.curve[0].time - 1 : Math.floor(Date.now() / 1000), value: START_EQUITY }, ...a.curve];
   const dedup = []; let lastT = 0;
   for (const p of pts) { const t = p.time <= lastT ? lastT + 1 : p.time; dedup.push({ time: t, value: p.value }); lastT = t; }
   eqSeries.setData(dedup);
@@ -1120,20 +1402,22 @@ function showLiveCurve() {
   $('btResults').style.display = 'none';
   renderPaperPanel();
 }
+const pct1 = x => (x >= 0 ? '+' : '') + (x * 100).toFixed(1) + '%';
+const pfTxt = pf => pf == null ? '—' : pf === Infinity ? '∞' : pf.toFixed(2);
+const yieldUI = () => new Promise(r => setTimeout(r, 0));
 
-let deepCache = { tf: null, main: null, htf: null };
-async function ensureDeepData(want) {
-  if (deepCache.tf === want && deepCache.main) return deepCache;
-  const htfInt = HTF_MAP[want];
-  const btBars = BT_BARS_MAP[want] || 3000;
-  const htfNeed = Math.max(1000, Math.ceil(btBars * TF_SEC[want] / TF_SEC[htfInt]) + 250);
-  const [mainBars, htfBars] = await Promise.all([fetchDeep(want, btBars), fetchDeep(htfInt, htfNeed)]);
-  if (!mainBars || mainBars.length < 300 || !htfBars || htfBars.length < 210) return null;
-  deepCache = { tf: want, main: mainBars, htf: htfBars };
-  return deepCache;
+/* load deep history for the traded coins at the click-time TF; null if the TF changed or nothing loaded */
+async function loadBtData(btn, runTf) {
+  const syms = COINS.filter(s => settings.coins.includes(s));
+  if (!syms.length) { $('btNote').textContent = 'Select at least one coin to trade.'; $('btResults').style.display = 'block'; return null; }
+  const prof = profFor(runTf);
+  const data = await ensureDeepData(runTf, syms, prof.htfGate !== false, (d, n) => { btn.textContent = `FETCHING ${d}/${n}`; });
+  if (tf !== runTf) return null;
+  if (!data) { $('btNote').textContent = 'Backtest failed: not enough history fetched.'; $('btResults').style.display = 'block'; return null; }
+  return data;
 }
 
-/* ---- TP/SL grid optimizer: 4 stop methods × 4 TP1 multiples at fixed 5% risk ---- */
+/* ---- TP/SL grid optimizer: 4 stop methods × 4 TP1 multiples on the whole portfolio ---- */
 const GRID_SL = [
   { name: 'ST LINE', slAtr: null },
   { name: '1.5×ATR', slAtr: 1.5 },
@@ -1148,36 +1432,26 @@ async function runGrid() {
   btn.disabled = true;
   try {
     btn.textContent = 'FETCHING…';
-    const data = await ensureDeepData(runTf);
-    if (tf !== runTf) return;
-    if (!data) {
-      $('btGrid').innerHTML = '<div class="empty">Grid failed: not enough history fetched.</div>';
-      $('btResults').style.display = 'block';
-      return;
-    }
-    btn.textContent = 'GRID 0/16';
-    const prof = TF_PROFILE[runTf];
-    const htfInt = HTF_MAP[runTf];
+    const data = await loadBtData(btn, runTf);
+    if (!data) return;
+    const prof = profFor(runTf);
     const cells = [];
     let done = 0, best = null;
     for (const sl of GRID_SL) {
       for (const tpR of GRID_TP) {
-        const p2 = { ...prof, slAtr: sl.slAtr, tpR };
-        const st = runReplay(data.main, data.htf, TF_SEC[runTf], TF_SEC[htfInt], settings.sessionFilter, 5, p2);
-        const m = btMetrics(st);
+        const m = btMetrics(runPortfolio(data, runTf, { prof: { ...prof, slAtr: sl.slAtr, tpR }, riskPct: settings.riskPct, maxOpen: settings.maxOpen, sessionFilter: settings.sessionFilter }));
         const ratio = m.dd > 0 ? m.ret / m.dd : (m.ret > 0 ? 99 : 0);
         const cell = { sl: sl.name, slAtr: sl.slAtr, tpR, m, ratio };
         cells.push(cell);
         if (!best || ratio > best.ratio) best = cell;
-        done++;
-        btn.textContent = `GRID ${done}/16`;
-        await new Promise(r => setTimeout(r, 0)); // keep UI responsive
+        btn.textContent = `GRID ${++done}/16`;
+        await yieldUI();
       }
     }
     if (tf !== runTf) return;
     const isCur = c2 => c2.slAtr === (prof.slAtr ?? null) && c2.tpR === (prof.tpR ?? 1.5);
     let html = `<div class="panel-head" style="border-top:1px solid var(--border);color:var(--accent);">
-      <span>TP/SL Grid · ${TF_LABEL[runTf]} · ret/dd at 5% risk</span><span>${data.main.length} bars</span></div>`;
+      <span>TP/SL Grid · ${TF_LABEL[runTf]} · ${Object.keys(data).length} coins · ret/dd at ${settings.riskPct}% × ${settings.maxOpen}</span><span></span></div>`;
     html += `<div class="hrow" style="grid-template-columns:1.1fr 1fr 1fr 1fr 1fr;color:var(--muted);font-size:9px;letter-spacing:1px;">
       <span>SL \\ TP1</span>${GRID_TP.map(t => `<span>${t.toFixed(1)}R</span>`).join('')}</div>`;
     for (const sl of GRID_SL) {
@@ -1192,9 +1466,8 @@ async function runGrid() {
     const b = best.m;
     html += `<div class="empty" style="text-align:left;">
       ★ BEST: <b style="color:var(--long)">${best.sl} stop · TP1 ${best.tpR.toFixed(1)}R</b> —
-      ${b.n} trades, WR ${b.wr != null ? Math.round(b.wr * 100) + '%' : '—'}, PF ${b.pf === Infinity ? '∞' : b.pf?.toFixed(2)},
-      avg ${b.avgR != null ? (b.avgR >= 0 ? '+' : '') + b.avgR.toFixed(2) + 'R' : '—'},
-      ${(b.ret >= 0 ? '+' : '') + (b.ret * 100).toFixed(1)}% / ${(b.dd * 100).toFixed(1)}% DD.
+      ${b.n} trades, WR ${b.wr != null ? Math.round(b.wr * 100) + '%' : '—'}, PF ${pfTxt(b.pf)},
+      ${pct1(b.ret)} / ${(b.dd * 100).toFixed(1)}% DD.
       ◂ = current profile. Caution: best-of-16 on one history is partly curve-fit — prefer cells in a stable neighborhood over isolated peaks.</div>`;
     $('btGrid').innerHTML = html;
     $('btResults').style.display = 'block';
@@ -1211,76 +1484,64 @@ async function runBacktest() {
   btn.disabled = true;
   try {
     btn.textContent = 'FETCHING…';
-    const htfInt = HTF_MAP[runTf];
-    const data = await ensureDeepData(runTf);
-    if (tf !== runTf) return;
-    if (!data) {
-      $('btNote').textContent = 'Backtest failed: not enough history fetched.';
-      $('btResults').style.display = 'block';
-      return;
-    }
-    const mainBars = data.main, htfBars = data.htf;
+    const data = await loadBtData(btn, runTf);
+    if (!data) return;
     btn.textContent = 'REPLAYING…';
     await new Promise(r => setTimeout(r, 30)); // let button paint
     if (tf !== runTf) return;
-    const prof = TF_PROFILE[runTf];
-    const activeRisk = prof.riskPct ?? RISK_PCT;
-    const state = runReplay(mainBars, htfBars, TF_SEC[runTf], TF_SEC[htfInt], settings.sessionFilter, activeRisk, prof);
-    const m = btMetrics(state);
+    const prof = profFor(runTf);
+    const syms = Object.keys(data);
+    const base = { prof, riskPct: settings.riskPct, maxOpen: settings.maxOpen, sessionFilter: settings.sessionFilter };
+    const a = runPortfolio(data, runTf, base);
+    const m = btMetrics(a);
     $('b-n').textContent = m.n;
     $('b-wr').textContent = m.wr != null ? Math.round(m.wr * 100) + '%' : '—';
-    $('b-pf').textContent = m.pf == null ? '—' : m.pf === Infinity ? '∞' : m.pf.toFixed(2);
+    $('b-pf').textContent = pfTxt(m.pf);
     $('b-pf').style.color = m.pf != null && m.pf >= 1 ? 'var(--long)' : 'var(--short)';
     $('b-r').textContent = m.avgR != null ? (m.avgR >= 0 ? '+' : '') + m.avgR.toFixed(2) + 'R' : '—';
     $('b-r').style.color = m.avgR >= 0 ? 'var(--long)' : 'var(--short)';
-    $('b-ret').textContent = (m.ret >= 0 ? '+' : '') + (m.ret * 100).toFixed(1) + '%';
+    $('b-ret').textContent = pct1(m.ret);
     $('b-ret').style.color = m.ret >= 0 ? 'var(--long)' : 'var(--short)';
     $('b-dd').textContent = (m.dd * 100).toFixed(1) + '%';
     $('b-best').textContent = m.best != null ? (m.best >= 0 ? '+' : '') + m.best.toFixed(1) : '—';
     $('b-worst').textContent = m.worst != null ? m.worst.toFixed(1) : '—';
-    const days = ((mainBars[mainBars.length - 1].time - mainBars[0].time) / 86400).toFixed(0);
+    const first = Math.min(...syms.map(s => data[s].main[0].time)), last = Math.max(...syms.map(s => lastOf(data[s].main).time));
+    const days = ((last - first) / 86400).toFixed(0);
     const rs = Object.entries(m.reasons).map(([k, v2]) => `${k}×${v2}`).join(' · ');
-    $('btNote').textContent = `Exits: ${rs || 'none'} — ${activeRisk}% target risk (avg actual ${m.avgRiskPct != null ? m.avgRiskPct.toFixed(1) + '%' : '—'} after ${LEV}x cap), fees ${(FEE * 100).toFixed(3)}%/side, session filter ${settings.sessionFilter ? 'ON' : 'OFF'}, HTF ${TF_LABEL[htfInt]} gate, profile: ${prof.minScore}/5 required, stop ${prof.slAtr != null ? prof.slAtr + '×ATR' : 'Supertrend'}, TP1 ${prof.tpR ?? 1.5}R, flip exit ${prof.flipExit ? 'ON' : 'OFF'}. SL-first on ambiguous bars, gap-through stops fill at the open, cross-margin liquidation modeled.`;
+    $('btNote').textContent = `Exits: ${rs || 'none'} — ${settings.riskPct}% risk per coin, max ${settings.maxOpen} open, shared ${LEV}x cap, fees ${(FEE * 100).toFixed(3)}%/side, session filter ${settings.sessionFilter ? 'ON' : 'OFF'}, HTF ${TF_LABEL[HTF_MAP[runTf]]} gate ${prof.htfGate === false ? 'OFF' : 'ON'}, ${prof.minScore}/5 required, stop ${prof.slAtr != null ? prof.slAtr + '×ATR' : 'Supertrend'}, TP1 ${prof.tpR}R, flip exit ${prof.flipExit ? 'ON' : 'OFF'}. SL-first on ambiguous bars, gap-through stops fill at the open, cross-margin liquidation modeled. No slippage — real results will be somewhat worse.`;
 
-    // ---- full matrix: every profile × every risk level ----
-    const variants = [
-      { name: `${prof.minScore}/5 · ${prof.slAtr != null ? prof.slAtr + '×ATR' : 'ST'} stop · TP1 ${prof.tpR ?? 1.5}R · flip ${prof.flipExit ? 'ON' : 'OFF'}`, p: prof, active: true },
-      { name: '4/5 · ST stop · TP1 1.5R · flip ON (old default)', p: { minScore: 4, flipExit: true } },
-      { name: '4/5 · ST stop · TP1 1.5R · flip OFF', p: { minScore: 4, flipExit: false } },
-      { name: '5/5 · ST stop · TP1 1.5R · flip OFF', p: { minScore: 5, flipExit: false } }
-    ];
-    const RISKS = [1, 2, 3, 5, 10, 25, 100];
-    let sweepHtml = '';
-    for (const v2 of variants) {
-      const isActiveProf = !!v2.active;
-      const rows = RISKS.map(rp => {
-        const st2 = runReplay(mainBars, htfBars, TF_SEC[runTf], TF_SEC[htfInt], settings.sessionFilter, rp, v2.p);
-        return { rp, m: btMetrics(st2) };
-      });
-      const ref = rows.find(r => r.rp === 5).m; // N/WR/PF shown at the 5% reference row
-      sweepHtml +=
-        `<div class="panel-head" style="border-top:1px solid var(--border);${isActiveProf ? 'color:var(--wait);' : ''}">
-          <span>${v2.name}${isActiveProf ? ' ◂ ACTIVE' : ''}</span>
-          <span>${ref.n} trades · WR ${ref.wr != null ? Math.round(ref.wr * 100) + '%' : '—'} · PF@5% ${ref.pf == null ? '—' : ref.pf === Infinity ? '∞' : ref.pf.toFixed(2)}</span>
-        </div>` +
-        `<div class="hrow" style="grid-template-columns:1fr 1fr 1fr 1fr 1fr;color:var(--muted);font-size:9px;letter-spacing:1px;">
-          <span>TARGET</span><span>ACTUAL</span><span>RETURN</span><span>MAX DD</span><span>RET/DD</span></div>` +
-        rows.map(({ rp, m: m2 }) => {
-          const ratio = m2.dd > 0 ? m2.ret / m2.dd : null;
-          const hl = isActiveProf && rp === activeRisk;
-          return `<div class="hrow" style="grid-template-columns:1fr 1fr 1fr 1fr 1fr;${hl ? 'background:rgba(245,181,63,0.06);' : ''}">
-            <span>${rp}%${hl ? ' ◂' : ''}</span>
-            <span>${m2.avgRiskPct != null ? m2.avgRiskPct.toFixed(1) + '%' : '—'}${m2.reasons.LIQ ? ` · LIQ×${m2.reasons.LIQ}` : ''}</span>
-            <span style="color:${m2.ret >= 0 ? 'var(--long)' : 'var(--short)'}">${(m2.ret >= 0 ? '+' : '') + (m2.ret * 100).toFixed(1)}%</span>
-            <span>${(m2.dd * 100).toFixed(1)}%</span>
-            <span>${ratio != null ? ratio.toFixed(2) : '—'}</span>
-          </div>`;
-        }).join('');
+    // ---- per-coin contribution ----
+    $('btCoins').innerHTML =
+      `<div class="panel-head" style="border-top:1px solid var(--border);"><span>Per Coin</span><span>${syms.length} coins</span></div>
+       <div class="hrow" style="grid-template-columns:1fr 1fr 1fr 1fr 1.2fr;color:var(--muted);font-size:9px;letter-spacing:1px;"><span>COIN</span><span>TRADES</span><span>WIN RATE</span><span>PF</span><span>NET PNL</span></div>` +
+      COINS.filter(s => data[s]).map(s => {
+        const c = m.perCoin[s] || { n: 0, wins: 0, pnl: 0, gw: 0, gl: 0 };
+        return `<div class="hrow" style="grid-template-columns:1fr 1fr 1fr 1fr 1.2fr;">
+          <span>${coinName(s)}</span><span>${c.n}</span><span>${c.n ? Math.round(c.wins / c.n * 100) + '%' : '—'}</span>
+          <span>${pfTxt(c.gl > 0 ? c.gw / c.gl : c.gw > 0 ? Infinity : null)}</span>
+          <span style="color:${c.pnl >= 0 ? 'var(--long)' : 'var(--short)'}">${c.pnl >= 0 ? '+' : ''}${c.pnl.toFixed(1)}</span></div>`;
+      }).join('');
+
+    // ---- risk per coin × max open positions ----
+    const RISKS = [0.25, 0.5, 1, 2, 3];
+    const OPENS = [...new Set([1, 2, 4, syms.length])].filter(n => n <= syms.length).sort((x, y) => x - y);
+    let rowsHtml = '';
+    for (const rp of RISKS) {
+      const cellsHtml = [];
+      for (const mo of OPENS) {
+        const m2 = btMetrics(runPortfolio(data, runTf, { ...base, riskPct: rp, maxOpen: mo }));
+        const hl = rp === settings.riskPct && mo === settings.maxOpen;
+        cellsHtml.push(`<span style="${hl ? 'color:var(--wait);font-weight:700;' : ''}"><span style="color:${m2.ret >= 0 ? 'var(--long)' : 'var(--short)'}">${pct1(m2.ret)}</span> / ${(m2.dd * 100).toFixed(0)}%${hl ? ' ◂' : ''}</span>`);
+        await yieldUI();
+        if (tf !== runTf) return;
+      }
+      rowsHtml += `<div class="hrow" style="grid-template-columns:0.8fr ${OPENS.map(() => '1.3fr').join(' ')};"><span>${rp}%</span>${cellsHtml.join('')}</div>`;
     }
     $('btSweep').innerHTML =
-      `<div class="panel-head" style="border-top:1px solid var(--border);"><span>Profile × Risk Matrix · same data, ${variants.length * RISKS.length} replays</span></div>` + sweepHtml;
+      `<div class="panel-head" style="border-top:1px solid var(--border);"><span>Risk per coin × max open · return / max DD</span><span>${RISKS.length * OPENS.length} replays</span></div>
+       <div class="hrow" style="grid-template-columns:0.8fr ${OPENS.map(() => '1.3fr').join(' ')};color:var(--muted);font-size:9px;letter-spacing:1px;"><span>RISK</span>${OPENS.map(n => `<span>MAX ${n}</span>`).join('')}</div>` + rowsHtml;
 
-    showBtCurve(state, `${TF_LABEL[runTf]} · ${mainBars.length} bars · ${days}d`);
+    showBtCurve(a, `${TF_LABEL[runTf]} · ${syms.length} coins · ${days}d`);
   } finally {
     btn.disabled = false;
     btn.textContent = 'RUN BACKTEST';
@@ -1295,49 +1556,74 @@ $('tfs').addEventListener('click', async (e) => {
   document.querySelectorAll('.tf').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   if (btView) showLiveCurve();
-  savePaper();
+  saveAcct();
   tf = btn.dataset.tf;
-  candles = []; htfCandles = []; liveBar = null; // old-TF bars must never reach the new TF's paper account
+  for (const s of Object.keys(mkt)) Object.assign(mkt[s], { candles: [], htfCandles: [], liveBar: null, ev: null, hb: null }); // old-TF bars never reach the new account
   $('eqTf').textContent = TF_LABEL[tf];
   $('badgeNote').textContent = 'Loading ' + TF_LABEL[tf] + ' data…';
-  loadPaper();
-  const ok = await fetchAll();
-  if (ok) {
-    if (!paper.lastBarTime && candles.length) paper.lastBarTime = candles[candles.length - 1].time - 1;
-    render(true); connectWS();
-  }
+  loadAcct();
+  renderSettings();
+  syncSubs();
+  if (await fetchAllCoins()) render(true);
 });
+
+$('coinRows').addEventListener('click', (e) => {
+  const row = e.target.closest('.coin-row'); if (!row) return;
+  const sym = row.dataset.sym;
+  if (e.target.classList.contains('coin-on')) {
+    const on = e.target.checked;
+    settings.coins = COINS.filter(s => s === sym ? on : settings.coins.includes(s));
+    saveSettings();
+    syncSubs();
+    if (on && !evalCoin(sym)) fetchCoin(sym).then(ok => { if (ok) scheduleRender(); });
+    render(false);
+    return;
+  }
+  if (sym === viewSym) return;
+  viewSym = sym;
+  lastPrice = null;
+  const m = mkt[sym];
+  if (m && m.last != null) updateTicker(m.last, m.pct);
+  tradeBuf = []; renderPressure(true); seedPressure();
+  syncSubs();
+  if (evalCoin(sym)) { renderCoins(); renderView(true); }
+  else { renderView(); fetchCoin(sym).then(ok => { if (ok && sym === viewSym) { renderCoins(); renderView(true); } }); }
+});
+$('coinAll').addEventListener('click', () => { settings.coins = [...COINS]; saveSettings(); syncSubs(); resync(); render(false); });
+$('coinNone').addEventListener('click', () => { settings.coins = []; saveSettings(); syncSubs(); render(false); });
 
 $('resetBtn').addEventListener('click', () => {
-  if (!confirm(`Reset ${TF_LABEL[tf]} paper account to ${START_EQUITY} USDT? Trades will be erased.`)) return;
-  paper = newState();
-  if (candles.length) paper.lastBarTime = candles[candles.length - 1].time;
-  savePaper();
-  renderPaperPanel();
+  if (!confirm(`Reset the ${TF_LABEL[tf]} paper account to ${START_EQUITY} USDT? Open positions and trades will be erased.`)) return;
+  acct = newAcct();
+  const loaded = tradeSyms().filter(s => evalCoin(s));
+  if (loaded.length) acct.lastBarTime = Math.min(...loaded.map(s => lastOf(mkt[s].candles).time));
+  saveAcct();
+  render(false);
 });
 
-const sw = $('sessSwitch');
-function renderSwitch() { sw.classList.toggle('on', settings.sessionFilter); }
-sw.addEventListener('click', () => {
-  settings.sessionFilter = !settings.sessionFilter;
-  saveSettings(); renderSwitch();
-  if (candles.length >= 210) render(false);
+$('riskSel').innerHTML = RISK_CHOICES.map(r => `<option value="${r}">${r}%</option>`).join('');
+$('maxSel').innerHTML = MAX_OPEN_CHOICES.map(n => `<option value="${n}">${n}</option>`).join('');
+$('riskSel').addEventListener('change', e => { settings.riskPct = +e.target.value; saveSettings(); render(false); });
+$('maxSel').addEventListener('change', e => { settings.maxOpen = +e.target.value; saveSettings(); render(false); });
+$('sessSwitch').addEventListener('click', () => { settings.sessionFilter = !settings.sessionFilter; saveSettings(); render(false); });
+$('htfSwitch').addEventListener('click', () => {
+  settings.htfGate = { ...settings.htfGate, [tf]: !(profFor(tf).htfGate !== false) };
+  saveSettings(); render(false);
 });
 
 /* ================= BOOT ================= */
 (async function boot() {
-  loadSettings(); renderSwitch();
-  loadPaper();
+  loadSettings();
+  initCoinList();
+  loadAcct();
   initCharts();
+  renderSettings();
   $('eqTf').textContent = TF_LABEL[tf];
-  const ok = await fetchAll();
+  const ok = await fetchAllCoins();
   if (!ok) { $('badgeNote').textContent = 'Data load failed — check connection'; return; }
-  // first ever boot on this TF: start live-forward from NOW (no backfill farming)
-  if (!paper.lastBarTime && candles.length) {
-    paper.lastBarTime = candles[candles.length - 1].time - 1; // allow processing current closed bar once
-  }
   render(true);
-  if (liveBar) updateTicker(liveBar.close, null);
+  const m = mkt[viewSym];
+  if (m && m.last != null) updateTicker(m.last, m.pct);
   connectWS();
   fetchFng(); fetchGlobal(); seedPressure();
 })();
