@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CONFLUX v2 · BTCUSDT.P Entry Confluence</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -303,7 +303,7 @@ footer { max-width: 1240px; margin: 6px auto 0; padding: 0 14px; color: var(--mu
 
     <div class="panel">
       <div class="panel-head">
-        <span>Paper Position · <span id="riskLabel">100</span>% risk · 10x cap</span>
+        <span>Paper Position · <span id="riskLabel">—</span> · 10x cap</span>
         <span class="switch" id="sessSwitch"><span style="font-size:9px;letter-spacing:1px;">SESSION FILTER</span><span class="sw"></span></span>
       </div>
       <div class="eq-row">
@@ -321,7 +321,7 @@ footer { max-width: 1240px; margin: 6px auto 0; padding: 0 14px; color: var(--mu
 </div>
 
 <footer>
-  Signals on <b>closed candles only</b> (no repaint). Entry requires confluence ≥ 4, a fresh trigger (Supertrend flip or MACD zero-cross ≤ 2 bars), HTF bias agreement, and session OK (skips 02:00–06:00 UTC when filter is on). Management: SL at Supertrend line → 50% off at TP1 (1.5R) → SL to breakeven → trail on Supertrend; full exit if Supertrend flips. Fees 0.055%/side. SL assumed to fill first on ambiguous bars (conservative). Educational paper tool — nothing here predicts the market.
+  Signals on <b>closed candles only</b> (no repaint). Entry requires confluence ≥ 4, a fresh trigger (Supertrend flip or MACD zero-cross ≤ 2 bars), HTF bias agreement, and session OK (skips 02:00–06:00 UTC when filter is on). Management: SL at Supertrend line (entry skipped if that line is on the wrong side of price) → 50% off at TP1 (1.5R) → SL to fee-adjusted breakeven → trail on Supertrend; full exit if Supertrend flips. Fees 0.055%/side, booked in each trade's PnL. SL assumed to fill first on ambiguous bars; a bar that gaps through the stop fills at its open; cross-margin liquidation is modeled and a blown account stops trading. "Target risk" is capped by 10x leverage — the actual risk per trade is shown on the position and in the backtest. Educational paper tool — nothing here predicts the market.
 </footer>
 
 <script>
@@ -348,7 +348,7 @@ const TF_LABEL = { '5': '5m', '15': '15m', '30': '30m', '60': '1h', '240': '4h',
 let tf = '15';
 let candles = [], liveBar = null;
 let htfCandles = [];
-let ws = null, wsAlive = false;
+let ws = null, wsAlive = false, wsResync = false;
 let chart, candleSeries, ema50Series, ema200Series, stSeries, volSeries;
 let eqChart, eqSeries;
 let paper = null;
@@ -420,20 +420,20 @@ function supertrend(cs, period = 10, mult = 3) {
   const a = atr(cs, period);
   const n = cs.length;
   const dir = new Array(n).fill(null), line = new Array(n).fill(null);
-  let ub = null, lb = null, prevDir = 1;
+  /* TradingView Supertrend: bands ratchet while the prior close stays on their side,
+     and flips compare the close against the PREVIOUS bar's bands */
+  let up1 = null, dn1 = null, trend = 1;
   for (let i = 0; i < n; i++) {
     if (a[i] == null) continue;
     const c = cs[i], hl2 = (c.high + c.low) / 2;
-    const bu = hl2 + mult * a[i], bl = hl2 - mult * a[i];
+    let up = hl2 - mult * a[i], dn = hl2 + mult * a[i];
     const prevClose = i > 0 ? cs[i - 1].close : c.close;
-    ub = (ub == null || bu < ub || prevClose > ub) ? bu : ub;
-    lb = (lb == null || bl > lb || prevClose < lb) ? bl : lb;
-    let d = prevDir;
-    if (prevDir === 1 && c.close < lb) d = -1;
-    else if (prevDir === -1 && c.close > ub) d = 1;
-    if (d !== prevDir) { ub = bu; lb = bl; }
-    dir[i] = d; line[i] = d === 1 ? lb : ub;
-    prevDir = d;
+    if (up1 != null && prevClose > up1) up = Math.max(up, up1);
+    if (dn1 != null && prevClose < dn1) dn = Math.min(dn, dn1);
+    if (trend === -1 && dn1 != null && c.close > dn1) trend = 1;
+    else if (trend === 1 && up1 != null && c.close < up1) trend = -1;
+    dir[i] = trend; line[i] = trend === 1 ? up : dn;
+    up1 = up; dn1 = dn;
   }
   return { dir, line };
 }
@@ -478,50 +478,86 @@ function verdictFor(p, minScore = 4) {
   return { side: 'wait', score: Math.max(p.longScore, p.shortScore) };
 }
 
-/* HTF bias from closed higher-TF candles: 1 bull, -1 bear, 0 mixed */
-function htfBias(cs) {
-  if (cs.length < 210) return 0;
-  const closes = cs.map(c => c.close);
-  const e50 = ema(closes, 50), e200 = ema(closes, 200);
-  const st = supertrend(cs, 10, 3);
-  const i = cs.length - 1;
-  if (e200[i] == null || st.dir[i] == null) return 0;
-  const bull = e50[i] > e200[i], stUp = st.dir[i] === 1;
-  if (bull && stUp) return 1;
-  if (!bull && !stUp) return -1;
-  return 0;
+/* HTF bar index closed by the time a main bar closes (no lookahead); call with increasing times */
+function htfIndexer(htfBars, mainSec, htfSec) {
+  let hi = -1;
+  return t => {
+    while (hi + 1 < htfBars.length && htfBars[hi + 1].time + htfSec <= t + mainSec) hi++;
+    return hi;
+  };
 }
 
 /* ================= SESSION FILTER ================= */
 function inDeadZone(tsSec) { const h = new Date(tsSec * 1000).getUTCHours(); return h >= 2 && h < 6; }
 
+/* per-bar paper signal, shared by the live engine and the backtest so both trade identically */
+function sigAt(per, bars, i, bias, prof, useSessionFilter) {
+  const p = per[i], bar = bars[i];
+  const v = verdictFor(p, prof.minScore);
+  const slPrice = (prof.slAtr != null && p.atr != null)
+    ? (v.side === 'long' ? bar.close - prof.slAtr * p.atr : bar.close + prof.slAtr * p.atr)
+    : p.stLine;
+  return {
+    side: v.side, score: v.score,
+    trigger: p.trigger || !!(per[i - 1] && per[i - 1].trigger), // fresh trigger on this bar or the one before (≤ 2 bars)
+    stLine: p.stLine, stDir: p.stDir, slPrice,
+    htfOk: v.side === 'long' ? bias === 1 : v.side === 'short' ? bias === -1 : false,
+    sessionOk: !useSessionFilter || !inDeadZone(bar.time),
+    flipExit: prof.flipExit
+  };
+}
+
 /* ================= PAPER ENGINE (verified in Node) ================= */
+const MMR = 0.005; // maintenance margin rate (Bybit BTCUSDT tier 1), cross margin on the whole wallet
+const MIN_EQUITY = 0.01; // below this the account is blown and stops trading
+
 function newState(equity = START_EQUITY) {
-  return { equity, pos: null, trades: [], curve: [], lastBarTime: 0, startedAt: Date.now() };
+  return { equity, pos: null, trades: [], curve: [], lastBarTime: 0, startedAt: Date.now(), peak: equity, maxDD: 0 };
+}
+/* track peak equity and max drawdown from mark-to-market values (incl. intrabar worst case) */
+function markDD(state, value) {
+  if (state.peak == null) state.peak = START_EQUITY;
+  if (state.maxDD == null) state.maxDD = 0;
+  if (value > state.peak) state.peak = value;
+  else if (state.peak > 0) state.maxDD = Math.max(state.maxDD, Math.min(1, (state.peak - value) / state.peak));
+}
+/* price where wallet equity hits maintenance margin, and where it hits zero (bankruptcy, the liquidation fill) */
+function liqPrices(state) {
+  const p = state.pos, q = p.qty, E = state.equity;
+  if (p.dir === 1) return { liq: (q * p.entry - E) / (q * (1 - MMR)), bankrupt: (q * p.entry - E) / (q * (1 - FEE)) };
+  return { liq: (E + q * p.entry) / (q * (1 + MMR)), bankrupt: (E + q * p.entry) / (q * (1 + FEE)) };
 }
 function openPos(state, side, bar, slPrice) {
+  if (!(state.equity > MIN_EQUITY)) return false;
   const entry = bar.close, sl = slPrice;
-  const dist = Math.abs(entry - sl);
-  if (!(dist > 0)) return;
+  const dir = side === 'long' ? 1 : -1;
+  // the stop must sit on the losing side of entry: a 4/5 setup can fire while Supertrend still points the other way
+  if (sl == null || !((entry - sl) * dir > 0)) return false;
+  const dist = (entry - sl) * dir;
   const riskUsd = state.equity * (state.riskPct ?? RISK_PCT) / 100;
   let qty = riskUsd / dist;
   const cap = state.equity * LEV / entry;
   if (qty > cap) qty = cap;
-  const dir = side === 'long' ? 1 : -1;
-  state.equity -= qty * entry * FEE;
-  state.pos = { side, dir, entry, qty, initQty: qty, sl, tp1: entry + dir * (state.tpR ?? 1.5) * dist, tp1Hit: false, riskUsd, actualRisk: dist * qty, openTime: bar.time };
+  const tpR = state.tpR ?? 1.5;
+  const entryFee = qty * entry * FEE;
+  const actualRisk = dist * qty;
+  const riskPct = actualRisk / state.equity * 100;
+  state.equity -= entryFee;
+  // breakeven that also covers both fees on the remaining size
+  const be = dir === 1 ? entry * (1 + FEE) / (1 - FEE) : entry * (1 - FEE) / (1 + FEE);
+  state.pos = { side, dir, entry, qty, initQty: qty, sl, tp1: entry + dir * tpR * dist, tpR, tp1Hit: false, riskUsd, actualRisk, riskPct, entryFee, be, openTime: bar.time };
+  return true;
 }
 function closePart(state, exitPrice, qty, time, reason) {
   const p = state.pos;
   const pnl = (exitPrice - p.entry) * qty * p.dir;
-  const fee = qty * exitPrice * FEE;
-  state.equity += pnl - fee;
-  state.trades.push({ side: p.side, entry: p.entry, exit: exitPrice, qty, pnl: pnl - fee, reason, risk: p.actualRisk, openTime: p.openTime, closeTime: time });
+  const feeOut = qty * exitPrice * FEE;
+  const feeIn = (p.entryFee ?? 0) * qty / p.initQty; // entry fee already left equity at open; book its share on this fill
+  state.equity += pnl - feeOut;
+  state.trades.push({ side: p.side, entry: p.entry, exit: exitPrice, qty, pnl: pnl - feeOut - feeIn, reason, risk: p.actualRisk, riskPct: p.riskPct, openTime: p.openTime, closeTime: time });
   p.qty -= qty;
-  if (p.qty <= p.initQty * 1e-9) {
-    state.pos = null;
-    state.curve.push({ time, value: state.equity });
-  }
+  state.curve.push({ time, value: state.equity });
+  if (p.qty <= p.initQty * 1e-9) state.pos = null;
 }
 function paperStep(state, bar, sig) {
   if (bar.time <= state.lastBarTime) return false;
@@ -530,29 +566,42 @@ function paperStep(state, bar, sig) {
   const p = state.pos;
   if (p) {
     const d = p.dir;
+    const { liq, bankrupt } = liqPrices(state);
+    const hitLiq = d === 1 ? bar.low <= liq : bar.high >= liq;
     const hitSL = d === 1 ? bar.low <= p.sl : bar.high >= p.sl;
-    if (hitSL) {
-      closePart(state, p.sl, p.qty, bar.time, p.tp1Hit ? 'TRAIL' : 'SL');
+    // a bar that opens through the stop fills at the open, not at the stop price
+    const slFill = d === 1 ? Math.min(p.sl, bar.open) : Math.max(p.sl, bar.open);
+    const liqFirst = hitLiq && (!hitSL || (d === 1 ? liq >= slFill : liq <= slFill));
+    // intrabar worst case for drawdown (SL-first convention, same as the exits below)
+    const worstPx = liqFirst ? bankrupt : hitSL ? slFill : (d === 1 ? bar.low : bar.high);
+    markDD(state, state.equity + (worstPx - p.entry) * p.qty * d);
+    if (liqFirst) {
+      closePart(state, bankrupt, p.qty, bar.time, 'LIQ');
+      state.equity = Math.max(0, state.equity);
+      justExited = true; changed = true;
+    } else if (hitSL) {
+      closePart(state, slFill, p.qty, bar.time, p.tp1Hit ? 'TRAIL' : 'SL');
       justExited = true; changed = true;
     } else {
       if (!p.tp1Hit && (d === 1 ? bar.high >= p.tp1 : bar.low <= p.tp1)) {
         closePart(state, p.tp1, p.qty * 0.5, bar.time, 'TP1');
-        if (state.pos) { p.tp1Hit = true; p.sl = p.entry; }
+        if (state.pos) { p.tp1Hit = true; p.sl = p.be ?? p.entry; }
         changed = true;
       }
-      if (state.pos && sig.stDir !== d && sig.flipExit !== false) {
+      if (state.pos && sig.stDir != null && sig.stDir !== d && sig.flipExit !== false) {
         closePart(state, bar.close, state.pos.qty, bar.time, 'FLIP');
         justExited = true; changed = true;
-      } else if (state.pos && p.tp1Hit && sig.stDir === d) {
+      } else if (state.pos && p.tp1Hit && sig.stDir === d && sig.stLine != null) {
         const ns = d === 1 ? Math.max(p.sl, sig.stLine) : Math.min(p.sl, sig.stLine);
         if (ns !== p.sl) { p.sl = ns; changed = true; }
       }
     }
   }
   if (!state.pos && !justExited && sig.side !== 'wait' && sig.trigger && sig.htfOk && sig.sessionOk) {
-    openPos(state, sig.side, bar, sig.slPrice ?? sig.stLine);
-    changed = true;
+    if (openPos(state, sig.side, bar, sig.slPrice ?? sig.stLine)) changed = true;
   }
+  const q = state.pos;
+  markDD(state, q ? state.equity + (bar.close - q.entry) * q.qty * q.dir : state.equity);
   return changed;
 }
 
@@ -562,7 +611,15 @@ function savePaper() { try { localStorage.setItem(paperKey(), JSON.stringify(pap
 function loadPaper() {
   try {
     const raw = localStorage.getItem(paperKey());
-    if (raw) { paper = JSON.parse(raw); return; }
+    if (raw) {
+      paper = JSON.parse(raw);
+      if (paper.maxDD == null) { // saved before drawdown tracking: rebuild from closed-trade curve
+        let peak = START_EQUITY, dd = 0;
+        for (const c of paper.curve) { peak = Math.max(peak, c.value); dd = Math.max(dd, (peak - c.value) / peak); }
+        paper.peak = peak; paper.maxDD = dd;
+      }
+      return;
+    }
   } catch (e) {}
   paper = newState();
 }
@@ -587,18 +644,22 @@ async function fetchKlinesFor(interval) {
   }
   return null;
 }
+/* responses are dropped if the timeframe changed while the request was in flight */
 async function fetchAll() {
-  const [main, htf] = await Promise.all([fetchKlinesFor(tf), fetchKlinesFor(HTF_MAP[tf])]);
-  if (!main) return false;
+  const want = tf;
+  const [main, htf] = await Promise.all([fetchKlinesFor(want), fetchKlinesFor(HTF_MAP[want])]);
+  if (!main || want !== tf) return false;
   liveBar = main[main.length - 1];
   candles = main.slice(0, -1);
   if (htf) htfCandles = htf.slice(0, -1); // closed HTF bars only
   return true;
 }
 async function refreshHTF() {
-  const htf = await fetchKlinesFor(HTF_MAP[tf]);
-  if (htf) htfCandles = htf.slice(0, -1);
+  const want = tf;
+  const htf = await fetchKlinesFor(HTF_MAP[want]);
+  if (htf && want === tf) htfCandles = htf.slice(0, -1);
 }
+function resync() { return fetchAll().then(ok => { if (ok) render(false); }); }
 
 /* ================= MARKET PULSE ================= */
 const PRESSURE_WINDOW = 5 * 60 * 1000; // 5m rolling, ms
@@ -682,6 +743,7 @@ function connectWS() {
   ws = new WebSocket(WS_URL);
   ws.onopen = () => {
     wsAlive = true; setConn(true);
+    if (wsResync) { wsResync = false; resync(); } // reload bars that closed while the socket was down
     ws.send(JSON.stringify({ op: 'subscribe', args: [`tickers.${SYMBOL}`, `kline.${tf}.${SYMBOL}`, `publicTrade.${SYMBOL}`] }));
     ws._ping = setInterval(() => { try { ws.send(JSON.stringify({ op: 'ping' })); } catch (e) {} }, 20000);
   };
@@ -699,11 +761,13 @@ function connectWS() {
       for (const k of msg.data) {
         const bar = { time: Math.floor(+k.start / 1000), open: +k.open, high: +k.high, low: +k.low, close: +k.close, volume: +k.volume };
         if (k.confirm) {
-          if (!candles.length || bar.time > candles[candles.length - 1].time) {
+          if (candles.length && bar.time - candles[candles.length - 1].time > TF_SEC[tf]) {
+            resync(); // missed a closed bar: reload history instead of appending across a gap
+          } else if (!candles.length || bar.time > candles[candles.length - 1].time) {
             candles.push(bar);
             if (candles.length > LIMIT) candles.shift();
             liveBar = null;
-            refreshHTF().finally(() => render(true));
+            refreshHTF().finally(() => render(false));
           }
         } else {
           liveBar = bar;
@@ -714,10 +778,10 @@ function connectWS() {
       }
     }
   };
-  ws.onclose = () => { wsAlive = false; setConn(false); clearInterval(ws._ping); setTimeout(connectWS, 3000); };
+  ws.onclose = () => { wsAlive = false; wsResync = true; setConn(false); clearInterval(ws._ping); setTimeout(connectWS, 3000); };
   ws.onerror = () => { try { ws.close(); } catch (e) {} };
 }
-setInterval(async () => { if (!wsAlive) { const ok = await fetchAll(); if (ok) render(true); } }, 30000);
+setInterval(() => { if (!wsAlive) resync(); }, 30000);
 
 /* ================= UI ================= */
 const $ = id => document.getElementById(id);
@@ -778,6 +842,9 @@ function updatePosUPnL(price) {
 
 function renderPaperPanel() {
   const eq = paper.equity;
+  $('riskLabel').textContent = `${paper.riskPct ?? RISK_PCT}% target risk` +
+    (paper.pos && paper.pos.riskPct != null ? ` · ${paper.pos.riskPct.toFixed(1)}% actual` : '') +
+    (eq <= MIN_EQUITY ? ' · ACCOUNT BLOWN' : '');
   $('eq').textContent = fmt(eq, 2);
   const total = eq - START_EQUITY;
   const ep = $('eqPnl');
@@ -794,7 +861,9 @@ function renderPaperPanel() {
           <div class="pos-cell"><div class="k">ENTRY</div><div class="v">${fmt(p.entry)}</div></div>
           <div class="pos-cell"><div class="k">uPNL</div><div class="v" id="upnl">—</div></div>
           <div class="pos-cell"><div class="k">STOP ${p.tp1Hit ? '(TRAIL)' : ''}</div><div class="v" style="color:var(--short)">${fmt(p.sl)}</div></div>
-          <div class="pos-cell"><div class="k">${p.tp1Hit ? 'TP1 DONE ✓' : 'TP1 · 1.5R'}</div><div class="v" style="color:var(--long)">${fmt(p.tp1)}</div></div>
+          <div class="pos-cell"><div class="k">${p.tp1Hit ? 'TP1 DONE ✓' : `TP1 · ${p.tpR ?? 1.5}R`}</div><div class="v" style="color:var(--long)">${fmt(p.tp1)}</div></div>
+          <div class="pos-cell"><div class="k">RISK AT ENTRY</div><div class="v">${p.actualRisk.toFixed(2)} USDT${p.riskPct != null ? ` · ${p.riskPct.toFixed(1)}%` : ''}</div></div>
+          <div class="pos-cell"><div class="k">LIQ (CROSS)</div><div class="v">${(() => { const l = liqPrices(paper).liq; return l > 0 ? fmt(l) : 'none'; })()}</div></div>
         </div>
       </div>`;
     if (lastPrice) updatePosUPnL(lastPrice);
@@ -825,9 +894,7 @@ function renderPaperPanel() {
   const sp = $('s-pnl');
   sp.textContent = rts.length ? (total >= 0 ? '+' : '') + total.toFixed(1) : '—';
   sp.style.color = total >= 0 ? 'var(--long)' : 'var(--short)';
-  let peak = START_EQUITY, dd = 0, run = START_EQUITY;
-  for (const c of paper.curve) { run = c.value; peak = Math.max(peak, run); dd = Math.max(dd, (peak - run) / peak); }
-  $('s-dd').textContent = paper.curve.length ? (dd * 100).toFixed(1) + '%' : '—';
+  $('s-dd').textContent = paper.trades.length || paper.maxDD > 0 ? ((paper.maxDD || 0) * 100).toFixed(1) + '%' : '—';
 
   // equity curve (skip while backtest view is showing)
   if (!btView) {
@@ -866,7 +933,7 @@ function render(fitContent = false) {
     }
   }
   candleSeries.setMarkers(markers.slice(-60));
-  if (fitContent) chart.timeScale().scrollToRealTime();
+  if (fitContent) chart.timeScale().scrollToRealTime(); // only on load / TF switch, so browsing history isn't yanked back
 
   // ---- last closed bar state ----
   const p = per[per.length - 1];
@@ -874,9 +941,11 @@ function render(fitContent = false) {
   const c = candles[candles.length - 1];
   $('closedTime').textContent = new Date(c.time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  const bias = htfBias(htfCandles);
-  const sessionOk = !settings.sessionFilter || !inDeadZone(c.time);
-  const htfOk = v.side === 'wait' ? bias !== 0 : (v.side === 'long' ? bias === 1 : bias === -1);
+  const biasArr = htfBiasSeries(htfCandles);
+  const htfLast = htfIndexer(htfCandles, TF_SEC[tf], TF_SEC[HTF_MAP[tf]])(c.time);
+  const bias = htfLast >= 0 ? biasArr[htfLast] : 0;
+  const sig = sigAt(per, candles, per.length - 1, bias, prof, settings.sessionFilter);
+  const { sessionOk, htfOk } = sig;
 
   setCond('regime', p.conds.regime, p.conds.regime === 1 ? 'BULL' : 'BEAR');
   setCond('struct', p.conds.struct, p.conds.struct === 1 ? 'ABOVE' : 'BELOW');
@@ -903,7 +972,7 @@ function render(fitContent = false) {
 
   const trig = $('trigger');
   trig.className = 'trigger-flag';
-  const recentTrigger = per.slice(-2).some(x => x && x.trigger);
+  const recentTrigger = sig.trigger;
   if (v.side !== 'wait' && recentTrigger && htfOk && sessionOk) trig.classList.add(v.side);
 
   const fill = $('scoreFill');
@@ -912,17 +981,21 @@ function render(fitContent = false) {
   fill.style.background = v.side === 'long' ? 'var(--long)' : v.side === 'short' ? 'var(--short)' : 'var(--wait)';
   $('scoreLabel').textContent = `CONFLUENCE ${score} / 5 · NEED ${prof.minScore} · ${v.side.toUpperCase()}`;
 
-  // ---- paper engine: process this closed bar exactly once ----
+  // ---- paper engine: process every closed bar not seen yet (catches up after reloads, tab sleep, WS gaps) ----
   paper.riskPct = prof.riskPct ?? RISK_PCT;
   paper.tpR = prof.tpR ?? 1.5;
-  $('riskLabel').textContent = paper.riskPct;
-  const liveSl = (prof.slAtr != null && p.atr != null)
-    ? (v.side === 'long' ? c.close - prof.slAtr * p.atr : c.close + prof.slAtr * p.atr)
-    : p.stLine;
-  const changed = paperStep(paper, c, {
-    side: v.side, trigger: p.trigger, stLine: p.stLine, stDir: p.stDir, slPrice: liveSl, htfOk, sessionOk, flipExit: prof.flipExit
-  });
-  if (changed || paper.lastBarTime === c.time) savePaper();
+  const htfAt = htfIndexer(htfCandles, TF_SEC[tf], TF_SEC[HTF_MAP[tf]]);
+  const startT = paper.lastBarTime;
+  for (let i = 0; i < candles.length; i++) {
+    if (candles[i].time <= paper.lastBarTime) continue;
+    const hi = htfAt(candles[i].time);
+    // bars before indicator warmup still get SL/TP/liquidation checks, just no entries, flips or trailing
+    const s = per[i]
+      ? sigAt(per, candles, i, hi >= 0 ? biasArr[hi] : 0, prof, settings.sessionFilter)
+      : { side: 'wait', trigger: false, stLine: null, stDir: null, htfOk: false, sessionOk: false, flipExit: false };
+    paperStep(paper, candles[i], s);
+  }
+  if (paper.lastBarTime !== startT) savePaper();
   renderPaperPanel();
 
   if (v.side !== 'wait' && htfOk && sessionOk && recentTrigger) {
@@ -984,26 +1057,20 @@ function runReplay(mainBars, htfBars, mainSec, htfSec, useSessionFilter, riskPct
   const prof = profile || { minScore: 4, flipExit: true };
   const { per } = evaluate(mainBars);
   const biasArr = htfBiasSeries(htfBars);
+  const htfAt = htfIndexer(htfBars, mainSec, htfSec);
   const state = newState();
   if (riskPct != null) state.riskPct = riskPct;
   if (prof.tpR != null) state.tpR = prof.tpR;
-  let hi = -1;
   for (let i = 0; i < mainBars.length; i++) {
     const p = per[i]; if (!p) continue;
-    const bar = mainBars[i];
-    const mainCloseT = bar.time + mainSec;
-    while (hi + 1 < htfBars.length && htfBars[hi + 1].time + htfSec <= mainCloseT) hi++;
-    const bias = hi >= 0 ? biasArr[hi] : 0;
-    const v = verdictFor(p, prof.minScore);
-    const htfOk = v.side === 'long' ? bias === 1 : v.side === 'short' ? bias === -1 : false;
-    const sessionOk = !useSessionFilter || !inDeadZone(bar.time);
-    const slPrice = (prof.slAtr != null && p.atr != null)
-      ? (v.side === 'long' ? bar.close - prof.slAtr * p.atr : bar.close + prof.slAtr * p.atr)
-      : p.stLine;
-    paperStep(state, bar, { side: v.side, trigger: p.trigger, stLine: p.stLine, stDir: p.stDir, slPrice, htfOk, sessionOk, flipExit: prof.flipExit });
+    const hi = htfAt(mainBars[i].time);
+    paperStep(state, mainBars[i], sigAt(per, mainBars, i, hi >= 0 ? biasArr[hi] : 0, prof, useSessionFilter));
   }
   // force-close any open position at the last close so metrics are complete
-  if (state.pos) closePart(state, mainBars[mainBars.length - 1].close, state.pos.qty, mainBars[mainBars.length - 1].time, 'EOB');
+  if (state.pos) {
+    closePart(state, mainBars[mainBars.length - 1].close, state.pos.qty, mainBars[mainBars.length - 1].time, 'EOB');
+    markDD(state, state.equity);
+  }
   return state;
 }
 
@@ -1013,6 +1080,7 @@ function btMetrics(state) {
   const rts = Object.values(byOpen).map(fills => ({
     pnl: fills.reduce((s, f) => s + f.pnl, 0),
     risk: fills[0].risk || null,
+    riskPct: fills[0].riskPct,
     reasons: fills.map(f => f.reason)
   }));
   const wins = rts.filter(r => r.pnl > 0);
@@ -1021,8 +1089,8 @@ function btMetrics(state) {
   const grossL = Math.abs(losses.reduce((s, r) => s + r.pnl, 0));
   const withR = rts.filter(r => r.risk > 0);
   const avgR = withR.length ? withR.reduce((s, r) => s + r.pnl / r.risk, 0) / withR.length : null;
-  let peak = START_EQUITY, dd = 0;
-  for (const c of state.curve) { peak = Math.max(peak, c.value); dd = Math.max(dd, (peak - c.value) / peak); }
+  const withRp = rts.filter(r => r.riskPct != null);
+  const avgRiskPct = withRp.length ? withRp.reduce((s, r) => s + r.riskPct, 0) / withRp.length : null;
   const reasons = {};
   for (const t of state.trades) reasons[t.reason] = (reasons[t.reason] || 0) + 1;
   return {
@@ -1031,7 +1099,8 @@ function btMetrics(state) {
     pf: grossL > 0 ? grossW / grossL : (grossW > 0 ? Infinity : null),
     avgR,
     ret: (state.equity - START_EQUITY) / START_EQUITY,
-    dd,
+    dd: state.maxDD ?? 0,
+    avgRiskPct,
     best: rts.length ? Math.max(...rts.map(r => r.pnl)) : null,
     worst: rts.length ? Math.min(...rts.map(r => r.pnl)) : null,
     reasons
@@ -1057,14 +1126,14 @@ function showLiveCurve() {
 }
 
 let deepCache = { tf: null, main: null, htf: null };
-async function ensureDeepData() {
-  if (deepCache.tf === tf && deepCache.main) return deepCache;
-  const htfInt = HTF_MAP[tf];
-  const btBars = BT_BARS_MAP[tf] || 3000;
-  const htfNeed = Math.max(1000, Math.ceil(btBars * TF_SEC[tf] / TF_SEC[htfInt]) + 250);
-  const [mainBars, htfBars] = await Promise.all([fetchDeep(tf, btBars), fetchDeep(htfInt, htfNeed)]);
+async function ensureDeepData(want) {
+  if (deepCache.tf === want && deepCache.main) return deepCache;
+  const htfInt = HTF_MAP[want];
+  const btBars = BT_BARS_MAP[want] || 3000;
+  const htfNeed = Math.max(1000, Math.ceil(btBars * TF_SEC[want] / TF_SEC[htfInt]) + 250);
+  const [mainBars, htfBars] = await Promise.all([fetchDeep(want, btBars), fetchDeep(htfInt, htfNeed)]);
   if (!mainBars || mainBars.length < 300 || !htfBars || htfBars.length < 210) return null;
-  deepCache = { tf, main: mainBars, htf: htfBars };
+  deepCache = { tf: want, main: mainBars, htf: htfBars };
   return deepCache;
 }
 
@@ -1079,24 +1148,26 @@ const GRID_TP = [1.0, 1.5, 2.0, 3.0];
 
 async function runGrid() {
   const btn = $('gridBtn');
+  const runTf = tf; // results are discarded if the user switches timeframe mid-run
   btn.disabled = true;
   try {
     btn.textContent = 'FETCHING…';
-    const data = await ensureDeepData();
+    const data = await ensureDeepData(runTf);
+    if (tf !== runTf) return;
     if (!data) {
       $('btGrid').innerHTML = '<div class="empty">Grid failed: not enough history fetched.</div>';
       $('btResults').style.display = 'block';
       return;
     }
     btn.textContent = 'GRID 0/16';
-    const prof = TF_PROFILE[tf];
-    const htfInt = HTF_MAP[tf];
+    const prof = TF_PROFILE[runTf];
+    const htfInt = HTF_MAP[runTf];
     const cells = [];
     let done = 0, best = null;
     for (const sl of GRID_SL) {
       for (const tpR of GRID_TP) {
         const p2 = { ...prof, slAtr: sl.slAtr, tpR };
-        const st = runReplay(data.main, data.htf, TF_SEC[tf], TF_SEC[htfInt], settings.sessionFilter, 5, p2);
+        const st = runReplay(data.main, data.htf, TF_SEC[runTf], TF_SEC[htfInt], settings.sessionFilter, 5, p2);
         const m = btMetrics(st);
         const ratio = m.dd > 0 ? m.ret / m.dd : (m.ret > 0 ? 99 : 0);
         const cell = { sl: sl.name, slAtr: sl.slAtr, tpR, m, ratio };
@@ -1107,9 +1178,10 @@ async function runGrid() {
         await new Promise(r => setTimeout(r, 0)); // keep UI responsive
       }
     }
+    if (tf !== runTf) return;
     const isCur = c2 => c2.slAtr === (prof.slAtr ?? null) && c2.tpR === (prof.tpR ?? 1.5);
     let html = `<div class="panel-head" style="border-top:1px solid var(--border);color:var(--accent);">
-      <span>TP/SL Grid · ${TF_LABEL[tf]} · ret/dd at 5% risk</span><span>${data.main.length} bars</span></div>`;
+      <span>TP/SL Grid · ${TF_LABEL[runTf]} · ret/dd at 5% risk</span><span>${data.main.length} bars</span></div>`;
     html += `<div class="hrow" style="grid-template-columns:1.1fr 1fr 1fr 1fr 1fr;color:var(--muted);font-size:9px;letter-spacing:1px;">
       <span>SL \\ TP1</span>${GRID_TP.map(t => `<span>${t.toFixed(1)}R</span>`).join('')}</div>`;
     for (const sl of GRID_SL) {
@@ -1139,11 +1211,13 @@ $('gridBtn').addEventListener('click', runGrid);
 
 async function runBacktest() {
   const btn = $('btBtn');
+  const runTf = tf; // results are discarded if the user switches timeframe mid-run
   btn.disabled = true;
   try {
     btn.textContent = 'FETCHING…';
-    const htfInt = HTF_MAP[tf];
-    const data = await ensureDeepData();
+    const htfInt = HTF_MAP[runTf];
+    const data = await ensureDeepData(runTf);
+    if (tf !== runTf) return;
     if (!data) {
       $('btNote').textContent = 'Backtest failed: not enough history fetched.';
       $('btResults').style.display = 'block';
@@ -1152,9 +1226,10 @@ async function runBacktest() {
     const mainBars = data.main, htfBars = data.htf;
     btn.textContent = 'REPLAYING…';
     await new Promise(r => setTimeout(r, 30)); // let button paint
-    const prof = TF_PROFILE[tf];
+    if (tf !== runTf) return;
+    const prof = TF_PROFILE[runTf];
     const activeRisk = prof.riskPct ?? RISK_PCT;
-    const state = runReplay(mainBars, htfBars, TF_SEC[tf], TF_SEC[htfInt], settings.sessionFilter, activeRisk, prof);
+    const state = runReplay(mainBars, htfBars, TF_SEC[runTf], TF_SEC[htfInt], settings.sessionFilter, activeRisk, prof);
     const m = btMetrics(state);
     $('b-n').textContent = m.n;
     $('b-wr').textContent = m.wr != null ? Math.round(m.wr * 100) + '%' : '—';
@@ -1165,11 +1240,11 @@ async function runBacktest() {
     $('b-ret').textContent = (m.ret >= 0 ? '+' : '') + (m.ret * 100).toFixed(1) + '%';
     $('b-ret').style.color = m.ret >= 0 ? 'var(--long)' : 'var(--short)';
     $('b-dd').textContent = (m.dd * 100).toFixed(1) + '%';
-    $('b-best').textContent = m.best != null ? '+' + m.best.toFixed(1) : '—';
+    $('b-best').textContent = m.best != null ? (m.best >= 0 ? '+' : '') + m.best.toFixed(1) : '—';
     $('b-worst').textContent = m.worst != null ? m.worst.toFixed(1) : '—';
     const days = ((mainBars[mainBars.length - 1].time - mainBars[0].time) / 86400).toFixed(0);
     const rs = Object.entries(m.reasons).map(([k, v2]) => `${k}×${v2}`).join(' · ');
-    $('btNote').textContent = `Exits: ${rs || 'none'} — ${activeRisk}% risk, ${LEV}x cap, fees ${(FEE * 100).toFixed(3)}%/side, session filter ${settings.sessionFilter ? 'ON' : 'OFF'}, HTF ${TF_LABEL[htfInt]} gate, profile: ${prof.minScore}/5 required, flip exit ${prof.flipExit ? 'ON' : 'OFF'}. SL-first on ambiguous bars (conservative).`;
+    $('btNote').textContent = `Exits: ${rs || 'none'} — ${activeRisk}% target risk (avg actual ${m.avgRiskPct != null ? m.avgRiskPct.toFixed(1) + '%' : '—'} after ${LEV}x cap), fees ${(FEE * 100).toFixed(3)}%/side, session filter ${settings.sessionFilter ? 'ON' : 'OFF'}, HTF ${TF_LABEL[htfInt]} gate, profile: ${prof.minScore}/5 required, flip exit ${prof.flipExit ? 'ON' : 'OFF'}. SL-first on ambiguous bars, gap-through stops fill at the open, cross-margin liquidation modeled.`;
 
     // ---- full matrix: every profile × every risk level ----
     const variants = [
@@ -1182,22 +1257,23 @@ async function runBacktest() {
     for (const v2 of variants) {
       const isActiveProf = v2.p.minScore === prof.minScore && v2.p.flipExit === prof.flipExit;
       const rows = RISKS.map(rp => {
-        const st2 = runReplay(mainBars, htfBars, TF_SEC[tf], TF_SEC[htfInt], settings.sessionFilter, rp, v2.p);
+        const st2 = runReplay(mainBars, htfBars, TF_SEC[runTf], TF_SEC[htfInt], settings.sessionFilter, rp, v2.p);
         return { rp, m: btMetrics(st2) };
       });
-      const ref = rows.find(r => r.rp === 5).m; // N/WR are sizing-independent; PF shown at 5% reference
+      const ref = rows.find(r => r.rp === 5).m; // N/WR/PF shown at the 5% reference row
       sweepHtml +=
         `<div class="panel-head" style="border-top:1px solid var(--border);${isActiveProf ? 'color:var(--wait);' : ''}">
           <span>${v2.name}${isActiveProf ? ' ◂ ACTIVE' : ''}</span>
           <span>${ref.n} trades · WR ${ref.wr != null ? Math.round(ref.wr * 100) + '%' : '—'} · PF@5% ${ref.pf == null ? '—' : ref.pf === Infinity ? '∞' : ref.pf.toFixed(2)}</span>
         </div>` +
-        `<div class="hrow" style="grid-template-columns:1fr 1fr 1fr 1fr;color:var(--muted);font-size:9px;letter-spacing:1px;">
-          <span>RISK/TRADE</span><span>RETURN</span><span>MAX DD</span><span>RET/DD</span></div>` +
+        `<div class="hrow" style="grid-template-columns:1fr 1fr 1fr 1fr 1fr;color:var(--muted);font-size:9px;letter-spacing:1px;">
+          <span>TARGET</span><span>ACTUAL</span><span>RETURN</span><span>MAX DD</span><span>RET/DD</span></div>` +
         rows.map(({ rp, m: m2 }) => {
           const ratio = m2.dd > 0 ? m2.ret / m2.dd : null;
           const hl = isActiveProf && rp === activeRisk;
-          return `<div class="hrow" style="grid-template-columns:1fr 1fr 1fr 1fr;${hl ? 'background:rgba(245,181,63,0.06);' : ''}">
+          return `<div class="hrow" style="grid-template-columns:1fr 1fr 1fr 1fr 1fr;${hl ? 'background:rgba(245,181,63,0.06);' : ''}">
             <span>${rp}%${hl ? ' ◂' : ''}</span>
+            <span>${m2.avgRiskPct != null ? m2.avgRiskPct.toFixed(1) + '%' : '—'}${m2.reasons.LIQ ? ` · LIQ×${m2.reasons.LIQ}` : ''}</span>
             <span style="color:${m2.ret >= 0 ? 'var(--long)' : 'var(--short)'}">${(m2.ret >= 0 ? '+' : '') + (m2.ret * 100).toFixed(1)}%</span>
             <span>${(m2.dd * 100).toFixed(1)}%</span>
             <span>${ratio != null ? ratio.toFixed(2) : '—'}</span>
@@ -1207,7 +1283,7 @@ async function runBacktest() {
     $('btSweep').innerHTML =
       `<div class="panel-head" style="border-top:1px solid var(--border);"><span>Profile × Risk Matrix · same data, 18 replays</span></div>` + sweepHtml;
 
-    showBtCurve(state, `${TF_LABEL[tf]} · ${mainBars.length} bars · ${days}d`);
+    showBtCurve(state, `${TF_LABEL[runTf]} · ${mainBars.length} bars · ${days}d`);
   } finally {
     btn.disabled = false;
     btn.textContent = 'RUN BACKTEST';
@@ -1224,6 +1300,7 @@ $('tfs').addEventListener('click', async (e) => {
   if (btView) showLiveCurve();
   savePaper();
   tf = btn.dataset.tf;
+  candles = []; htfCandles = []; liveBar = null; // old-TF bars must never reach the new TF's paper account
   $('eqTf').textContent = TF_LABEL[tf];
   $('badgeNote').textContent = 'Loading ' + TF_LABEL[tf] + ' data…';
   loadPaper();
